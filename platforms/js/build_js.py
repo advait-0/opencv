@@ -96,6 +96,7 @@ class Builder:
                "-DWITH_EIGEN=OFF",
                "-DWITH_FFMPEG=OFF",
                "-DWITH_GSTREAMER=OFF",
+ 	       "-DWITH_LIBCAMERA=ON",
                "-DWITH_GTK=OFF",
                "-DWITH_GTK_2_X=OFF",
                "-DWITH_IPP=OFF",

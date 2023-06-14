@@ -8,6 +8,7 @@ macro(add_backend backend_id cond_var)
   endif()
 endmacro()
 
+add_backend("libcamera" WITH_LIBCAMERA)
 add_backend("ffmpeg" WITH_FFMPEG)
 add_backend("gstreamer" WITH_GSTREAMER)
 add_backend("v4l" WITH_V4L)

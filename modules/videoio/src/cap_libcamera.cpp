@@ -58,3 +58,26 @@ int main()
     return 0;
 }
 
+
+Ptr<IVideoCapture> create_libcamera_capture_cam(int index)
+{
+    cv::CvCapture_libcamera* capture = new cv::CvCapture_libcamera();
+
+    if (capture->open(index))
+        return makePtr<LegacyCapture>(capture);
+
+    delete capture;
+    return NULL;
+}
+
+Ptr<IVideoCapture> create_libcamera_capture_file(const std::string &filename)
+{
+    cv::CvCapture_libcamera* capture = new cv::CvCapture_libcamera();
+
+    if (capture->open(filename.c_str()))
+        return makePtr<LegacyCapture>(capture);
+
+    delete capture;
+    return NULL;
+}
+

@@ -10,6 +10,7 @@
 
 using namespace cv;
 using namespace libcamera;
+<<<<<<< HEAD
 
 
 
@@ -32,6 +33,8 @@ cv::Ptr<cv::IVideoCapture> create_libcamera_capture_cam(int index)
     // delete capture;
     // return nullptr;
 }
+=======
+>>>>>>> 60f9d2159746b43c1a14ee6270c6adce34473720
 
 cv::Ptr<cv::IVideoCapture> create_libcamera_capture_file(const std::string& filename)
 {

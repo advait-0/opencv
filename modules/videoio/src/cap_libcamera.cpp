@@ -1,6 +1,7 @@
 #include <iomanip>
 #include <iostream>
 #include <memory>
+#include "precomp.hpp"
 
 #include <opencv2/core.hpp>
 #include <opencv2/videoio.hpp>
@@ -10,43 +11,66 @@
 
 using namespace cv;
 using namespace libcamera;
-<<<<<<< HEAD
 
 
+cv::Ptr<cv::IVideoCapture> create_libcamera_capture_cam(int index);
 
-cv::Ptr<cv::IVideoCapture> create_libcamera_capture_cam(int index)
+class CvCapture_libcamera_proxy CV_FINAL : public cv::IVideoCapture
 {
-    std::unique_ptr<CameraManager> cm = std::make_unique<CameraManager>();
-    cm->start();
-    if(cm->cameras().empty!=false)
+    bool isOpened_ = false;
+   
+    public:
+    CvCapture_libcamera_proxy()
     {
+     std::unique_ptr<CameraManager> cm = std::make_unique<CameraManager>();
+     cm->start();
+        
 
+    if(cm->cameras().empty())
+    {
+        isOpened_= false;
+        std::cout << "Cameras not available" << std::endl;
     }
-    Ptr<IVideoCapture> capture = makePtr<DigitalCameraCapture>(index);
+    else
+    {
+        isOpened_= true;
+        std::cout << "Cameras available" << std::endl;
+    }
+    
+    }
+
+    //  ~CvCapture_libcamera_proxy()
+    // {
+    //     if (isOpened_){
+    //         cm->stop();
+    //     }
+    // }
+
+    bool isOpened() const CV_OVERRIDE
+    {
+        return isOpened_;
+    }
+
+};
+// bool isOpened() const { return capture  != nullptr; }
+// cv::Ptr<cv::IVideoCapture> create_libcamera_capture_cam(int index)
+// {
+//     Ptr<IVideoCapture> capture = makePtr<CameraManager>(index);
+//     // std::unique_ptr<CameraManager> cm = 
+   
 
 
-    // CvCapture_libcamera* capture = new CvCapture_libcamera();
 
-    // if (capture->open(index))
-    //     return cv::makePtr<LegacyCapture>(capture);
+//     // CvCapture_libcamera* capture = new CvCapture_libcamera();
 
-    // delete capture;
-    // return nullptr;
-}
-=======
->>>>>>> 60f9d2159746b43c1a14ee6270c6adce34473720
+//     // if (capture->open(index))
+//     //     return cv::makePtr<LegacyCapture>(capture);
 
-cv::Ptr<cv::IVideoCapture> create_libcamera_capture_file(const std::string& filename)
-{
-    CvCapture_libcamera* capture = new CvCapture_libcamera();
+//     // delete capture;
+//     // return nullptr;
+// }
 
-    if (capture->open(filename.c_str()))
-        return cv::makePtr<LegacyCapture>(capture);
 
-    delete capture;
-    return nullptr;
-}
-}
 
 
 int main()

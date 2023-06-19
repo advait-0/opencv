@@ -1,4 +1,3 @@
-#include <iomanip>
 #include <iostream>
 #include <memory>
 #include "precomp.hpp"
@@ -12,66 +11,47 @@
 using namespace cv;
 using namespace libcamera;
 
-
-cv::Ptr<cv::IVideoCapture> create_libcamera_capture_cam(int index);
+namespace {
 
 class CvCapture_libcamera_proxy CV_FINAL : public cv::IVideoCapture
 {
     bool isOpened_ = false;
-   
-    public:
+
+public:
     CvCapture_libcamera_proxy()
     {
-     std::unique_ptr<CameraManager> cm = std::make_unique<CameraManager>();
-     cm->start();
-        
-
-    if(cm->cameras().empty())
-    {
-        isOpened_= false;
-        std::cout << "Cameras not available" << std::endl;
-    }
-    else
-    {
-        isOpened_= true;
-        std::cout << "Cameras available" << std::endl;
-    }
-    
+        isOpened_ = false;
     }
 
-    //  ~CvCapture_libcamera_proxy()
-    // {
-    //     if (isOpened_){
-    //         cm->stop();
-    //     }
-    // }
-
-    bool isOpened() const CV_OVERRIDE
+    virtual bool isOpened() CV_OVERRIDE
     {
+        std::unique_ptr<CameraManager> cm = std::make_unique<CameraManager>();
+        cm->start();
+
+        // Check if cameras are available
+        if (cm->cameras().empty()) {
+            std::cout << "No cameras available" << std::endl;
+            cm->stop();
+            isOpened_ = false;
+        }
+        else {
+            isOpened_ = true;
+            std::cout << "Cameras available" << std::endl;
+        }
+
         return isOpened_;
     }
-
 };
-// bool isOpened() const { return capture  != nullptr; }
-// cv::Ptr<cv::IVideoCapture> create_libcamera_capture_cam(int index)
-// {
-//     Ptr<IVideoCapture> capture = makePtr<CameraManager>(index);
-//     // std::unique_ptr<CameraManager> cm = 
-   
 
+cv::Ptr<cv::IVideoCapture> create_libcamera_capture_cam()
+{
+    cv::Ptr<CvCapture_libcamera_proxy> capture = cv::makePtr<CvCapture_libcamera_proxy>();
+    if (capture && capture->isOpened())
+        return capture;
+    return cv::Ptr<cv::IVideoCapture>();
+}
 
-
-//     // CvCapture_libcamera* capture = new CvCapture_libcamera();
-
-//     // if (capture->open(index))
-//     //     return cv::makePtr<LegacyCapture>(capture);
-
-//     // delete capture;
-//     // return nullptr;
-// }
-
-
-
+} // namespace
 
 int main()
 {
@@ -85,11 +65,7 @@ int main()
     }
 
     for (const auto& cam : cm->cameras())
-	std::cout << "Camera Found : " 
-		  << cam->id() << std::endl;
+        std::cout << "Camera Found : " << cam->id() << std::endl;
 
     return 0;
 }
-
-
-

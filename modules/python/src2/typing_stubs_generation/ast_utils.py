@@ -1,4 +1,5 @@
-from typing import NamedTuple, Sequence, Tuple, Union, List, Dict
+from typing import (NamedTuple, Sequence, Tuple, Union, List,
+                    Dict, Callable, Optional)
 import keyword
 
 from .nodes import (ASTNode, NamespaceNode, ClassNode, FunctionNode,
@@ -142,13 +143,24 @@ because 'GOpaque' class is not registered yet
     return scope
 
 
-def find_class_node(root: NamespaceNode, full_class_name: str,
-                    namespaces: Sequence[str]) -> ClassNode:
-    symbol_name = SymbolName.parse(full_class_name, namespaces)
-    scope = find_scope(root, symbol_name)
-    if symbol_name.name not in scope.classes:
-        raise SymbolNotFoundError("Can't find {} in its scope".format(symbol_name))
-    return scope.classes[symbol_name.name]
+def find_class_node(root: NamespaceNode, class_symbol: SymbolName,
+                    create_missing_namespaces: bool = False) -> ClassNode:
+    scope = find_scope(root, class_symbol, create_missing_namespaces)
+    if class_symbol.name not in scope.classes:
+        raise SymbolNotFoundError(
+            "Can't find {} in its scope".format(class_symbol)
+        )
+    return scope.classes[class_symbol.name]
+
+
+def find_function_node(root: NamespaceNode, function_symbol: SymbolName,
+                       create_missing_namespaces: bool = False) -> FunctionNode:
+    scope = find_scope(root, function_symbol, create_missing_namespaces)
+    if function_symbol.name not in scope.functions:
+        raise SymbolNotFoundError(
+            "Can't find {} in its scope".format(function_symbol)
+        )
+    return scope.functions[function_symbol.name]
 
 
 def create_function_node_in_scope(scope: Union[NamespaceNode, ClassNode],
@@ -323,12 +335,18 @@ def resolve_enum_scopes(root: NamespaceNode,
         enum_node.parent = scope
 
 
-def get_enclosing_namespace(node: ASTNode) -> NamespaceNode:
+def get_enclosing_namespace(
+    node: ASTNode,
+    class_node_callback: Optional[Callable[[ClassNode], None]] = None
+) -> NamespaceNode:
     """Traverses up nodes hierarchy to find closest enclosing namespace of the
     passed node
 
     Args:
         node (ASTNode): Node to find a namespace for.
+        class_node_callback (Optional[Callable[[ClassNode], None]]): Optional
+            callable object invoked for each traversed class node in bottom-up
+            order. Defaults: None.
 
     Returns:
         NamespaceNode: Closest enclosing namespace of the provided node.
@@ -360,8 +378,30 @@ def get_enclosing_namespace(node: ASTNode) -> NamespaceNode:
             "Can't find enclosing namespace for '{}' known as: '{}'".format(
                 node.full_export_name, node.native_name
             )
+        if class_node_callback:
+            class_node_callback(parent_node)
         parent_node = parent_node.parent
     return parent_node
+
+
+def get_enum_module_and_export_name(enum_node: EnumerationNode) -> Tuple[str, str]:
+    """Get export name of the enum node with its module name.
+
+    Note: Enumeration export names are prefixed with enclosing class names.
+
+    Args:
+        enum_node (EnumerationNode): Enumeration node to construct name for.
+
+    Returns:
+        Tuple[str, str]: a pair of enum export name and its full module name.
+    """
+    def update_full_export_name(class_node: ClassNode) -> None:
+        nonlocal enum_export_name
+        enum_export_name = class_node.export_name + "_" + enum_export_name
+
+    enum_export_name = enum_node.export_name
+    namespace_node = get_enclosing_namespace(enum_node, update_full_export_name)
+    return enum_export_name, namespace_node.full_export_name
 
 
 if __name__ == '__main__':

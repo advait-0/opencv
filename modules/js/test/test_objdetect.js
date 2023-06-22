@@ -200,6 +200,48 @@ QUnit.test('QR code detect and decode', function (assert) {
 
     }
 });
+QUnit.test('Aruco-based QR code detect', function (assert) {
+    {
+        let qrcode_params = new cv.QRCodeDetectorAruco_Params();
+        let detector = new cv.QRCodeDetectorAruco();
+        let mat = cv.Mat.ones(800, 600, cv.CV_8U);
+        assert.ok(mat);
+
+        detector.setDetectorParameters(qrcode_params);
+
+        let points = new cv.Mat();
+        let qrCodeFound = detector.detect(mat, points);
+        assert.equal(points.rows, 0)
+        assert.equal(points.cols, 0)
+        assert.equal(qrCodeFound, false);
+
+        qrcode_params.delete();
+        detector.delete();
+        points.delete();
+        mat.delete();
+    }
+});
+QUnit.test('Bar code detect', function (assert) {
+    {
+        let detector = new cv.barcode_BarcodeDetector();
+        let mat = cv.Mat.ones(800, 600, cv.CV_8U);
+        assert.ok(mat);
+
+        let points = new cv.Mat();
+        let codeFound = detector.detect(mat, points);
+        assert.equal(points.rows, 0)
+        assert.equal(points.cols, 0)
+        assert.equal(codeFound, false);
+
+        codeContent = detector.detectAndDecode(mat);
+        assert.equal(typeof codeContent, 'string');
+        assert.equal(codeContent, '');
+
+        detector.delete();
+        points.delete();
+        mat.delete();
+    }
+});
 QUnit.test('Aruco detector', function (assert) {
     {
         let dictionary = cv.getPredefinedDictionary(cv.DICT_4X4_50);

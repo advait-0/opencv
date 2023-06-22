@@ -90,6 +90,8 @@ using namespace cv;
 using namespace cv::segmentation;  // FIXIT
 
 using namespace cv::aruco;
+typedef aruco::DetectorParameters aruco_DetectorParameters;
+typedef QRCodeDetectorAruco::Params QRCodeDetectorAruco_Params;
 
 #ifdef HAVE_OPENCV_DNN
 using namespace cv::dnn;
@@ -98,6 +100,9 @@ using namespace cv::dnn;
 #ifdef HAVE_OPENCV_VIDEO
 typedef TrackerMIL::Params TrackerMIL_Params;
 #endif
+
+// HACK: JS generator ommits namespace for parameter types for some reason. Added typedef to handle std::string correctly
+typedef std::string string;
 
 namespace binding_utils
 {

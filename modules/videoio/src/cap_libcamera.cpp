@@ -42,6 +42,8 @@ public:
         
     }
 
+    //Return necessary values to resolve build errors
+
     bool isOpened() const CV_OVERRIDE
     {
       return isOpened_;
@@ -58,12 +60,18 @@ public:
     }
 };
 
-cv::Ptr<cv::IVideoCapture> create_libcamera_capture_cam()
+//Just a dummy function for now, to check for build errors
+cv::Ptr<cv::IVideoCapture> create_libcamera_capture_cam(int index)
 {
     cv::Ptr<CvCapture_libcamera_proxy> capture = cv::makePtr<CvCapture_libcamera_proxy>();
-    if (capture && capture->isOpened())
-        return capture;
-    return cv::Ptr<cv::IVideoCapture>();
+    std::cout<<index;
+     return cv::Ptr<cv::IVideoCapture>();
+
+    // Testing
+    // if (capture && capture->isOpened())
+    //     return capture;
+
+   
 } 
 }// namespace
 
@@ -83,12 +91,18 @@ int main()
     for (const auto& cam : cm->cameras())
         std::cout << "Camera Found : " << cam->id() << std::endl;
 
-    return 0;
+    
     CvCapture_libcamera_proxy *cap = 0;
+    int ind=0;
     cap = new CvCapture_libcamera_proxy();
+        std::cout<<ind;
         if (cap->isOpened())
         {
+            //Call the create_libcamera_capture_cam function and pass int parameter
+            cv::Ptr<cv::IVideoCapture> videoCapture = create_libcamera_capture_cam(ind);
             std::cout<<"Camera available main";
             return true;
         }
+    delete cap;
+    return 0;
 }

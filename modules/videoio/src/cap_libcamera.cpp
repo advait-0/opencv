@@ -1,7 +1,7 @@
 #include <iostream>
 #include <memory>
 #include "precomp.hpp"
-
+#include "cap_interface.hpp"
 #include <opencv2/core.hpp>
 #include <opencv2/videoio.hpp>
 #include <libcamera/libcamera.h>
@@ -11,7 +11,7 @@
 using namespace cv;
 using namespace libcamera;
 
-namespace {
+// namespace {
 
 
 class CvCapture_libcamera_proxy CV_FINAL : public cv::IVideoCapture
@@ -65,15 +65,13 @@ cv::Ptr<cv::IVideoCapture> create_libcamera_capture_cam(int index)
 {
     cv::Ptr<CvCapture_libcamera_proxy> capture = cv::makePtr<CvCapture_libcamera_proxy>();
     std::cout<<index;
-     return cv::Ptr<cv::IVideoCapture>();
-
-    // Testing
-    // if (capture && capture->isOpened())
-    //     return capture;
-
+     // Testing
+    if (capture && capture->isOpened())
+        return capture;
+    return cv::Ptr<cv::IVideoCapture>();
    
 } 
-}// namespace
+// }// namespace
 
 
 
@@ -100,9 +98,16 @@ int main()
         {
             //Call the create_libcamera_capture_cam function and pass int parameter
             cv::Ptr<cv::IVideoCapture> videoCapture = create_libcamera_capture_cam(ind);
+            if (videoCapture)
+            {
+            std::cout << "Camera available main";
+            return true;
+            }
             std::cout<<"Camera available main";
             return true;
         }
+
+    
     delete cap;
     return 0;
 }

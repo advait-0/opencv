@@ -31,6 +31,7 @@ struct {
     { cv::CAP_FFMPEG, "ffmpeg" },
     { cv::CAP_MSMF, "msmf" },
     { cv::CAP_GSTREAMER, "gstreamer" },
+    { cv::CAP_LIBCAMERA, "libcamera" },
 };
 
 struct {

@@ -234,6 +234,9 @@ OCV_OPTION(BUILD_ITT                "Build Intel ITT from source"
 
 # Optional 3rd party components
 # ===================================================
+OCV_OPTION(WITH_LIBCAMERA "Include libcamera support" ON
+  VISIBLE_IF NOT IOS AND NOT WINRT
+  VERIFY HAVE_LIBCAMERA)
 OCV_OPTION(WITH_1394 "Include IEEE1394 support" ON
   VISIBLE_IF NOT ANDROID AND NOT IOS AND NOT WINRT
   VERIFY HAVE_DC1394_2)

@@ -98,6 +98,7 @@ static const struct VideoBackendInfo builtin_backends[] =
     DECLARE_STATIC_BACKEND(CAP_DSHOW, "DSHOW", MODE_CAPTURE_BY_INDEX, 0, create_DShow_capture, 0)
 #endif
 
+
     // Linux, some Unix
 #if defined HAVE_CAMV4L2
     DECLARE_STATIC_BACKEND(CAP_V4L2, "V4L2", MODE_CAPTURE_ALL, create_V4L_capture_file, create_V4L_capture_cam, 0)
@@ -105,6 +106,9 @@ static const struct VideoBackendInfo builtin_backends[] =
     DECLARE_STATIC_BACKEND(CAP_V4L, "V4L_BSD", MODE_CAPTURE_ALL, create_V4L_capture_file, create_V4L_capture_cam, 0)
 #endif
 
+#if defined HAVE_LIBCAMERA
+    DECLARE_STATIC_BACKEND(CAP_LIBCAMERA, "libcamera", MODE_CAPTURE_ALL, create_V4L_capture_file, create_libcamera_capture_cam, 0)
+#endif
 
     // RGB-D universal
 #ifdef HAVE_OPENNI2

@@ -11,7 +11,7 @@
 using namespace cv;
 using namespace libcamera;
 
-// namespace {
+
 
 
 class CvCapture_libcamera_proxy CV_FINAL : public cv::IVideoCapture
@@ -58,22 +58,12 @@ public:
     {
       return false;
     }
+    virtual int getCaptureDomain() CV_OVERRIDE { return CAP_LIBCAMERA; }
 };
 
 //Just a dummy function for now, to check for build errors
-cv::Ptr<cv::IVideoCapture> create_libcamera_capture_cam(int index)
-{
-    cv::Ptr<CvCapture_libcamera_proxy> capture = cv::makePtr<CvCapture_libcamera_proxy>();
-    std::cout<<index;
-     // Testing
-    if (capture && capture->isOpened())
-        return capture;
-    return cv::Ptr<cv::IVideoCapture>();
-   
-} 
+
 // }// namespace
-
-
 
 int main()
 {
@@ -90,7 +80,7 @@ int main()
         std::cout << "Camera Found : " << cam->id() << std::endl;
 
     
-    CvCapture_libcamera_proxy *cap = 0;
+    CvCapture_libcamera_proxy *cap = nullptr;
     int ind=0;
     cap = new CvCapture_libcamera_proxy();
         std::cout<<ind;
@@ -110,4 +100,18 @@ int main()
     
     delete cap;
     return 0;
+}
+
+namespace cv 
+{
+    cv::Ptr<cv::IVideoCapture> create_libcamera_capture_cam(int index)
+{
+    cv::Ptr<CvCapture_libcamera_proxy> capture = cv::makePtr<CvCapture_libcamera_proxy>();
+    std::cout<<index;
+     // Testing
+    if (capture && capture->isOpened())
+        return capture;
+    return cv::Ptr<cv::IVideoCapture>();
+   
+} 
 }

@@ -18,6 +18,7 @@
         "CV_CAP_STEREO",
         "CV_CAP_TYZX",
         "CV_CAP_QT",
+        "CV_CAP_LIBCAMERA",
         "CV_CAP_UNICAP",
         "CV_CAP_DSHOW",
         "CV_CAP_PVAPI",

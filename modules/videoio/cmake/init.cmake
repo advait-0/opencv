@@ -8,6 +8,8 @@ macro(add_backend backend_id cond_var)
   endif()
 endmacro()
 
+add_backend("libcamera" WITH_LIBCAMERA)
+
 add_backend("ffmpeg" WITH_FFMPEG)
 add_backend("gstreamer" WITH_GSTREAMER)
 add_backend("v4l" WITH_V4L)
@@ -23,6 +25,7 @@ add_backend("ueye" WITH_UEYE)
 add_backend("ximea" WITH_XIMEA)
 add_backend("xine" WITH_XINE)
 add_backend("obsensor" WITH_OBSENSOR)
+
 
 add_backend("avfoundation" WITH_AVFOUNDATION)
 add_backend("ios" WITH_CAP_IOS)

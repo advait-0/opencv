@@ -121,6 +121,7 @@ enum VideoCaptureAPIs {
        CAP_OPENNI2_ASTRA= 1620,         //!< OpenNI2 (for Orbbec Astra)
        CAP_GPHOTO2      = 1700,         //!< gPhoto2 connection
        CAP_GSTREAMER    = 1800,         //!< GStreamer
+       CAP_LIBCAMERA    = 1801,
        CAP_FFMPEG       = 1900,         //!< Open and record video file or stream using the FFMPEG library
        CAP_IMAGES       = 2000,         //!< OpenCV Image Sequence (e.g. img_%02d.jpg)
        CAP_ARAVIS       = 2100,         //!< Aravis SDK

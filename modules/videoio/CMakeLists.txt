@@ -145,7 +145,6 @@ if(TARGET ocv.3rdparty.libcamera)
   list(APPEND tgts ocv.3rdparty.libcamera)
 endif()
 
-
 if(TARGET ocv.3rdparty.openni2)
   list(APPEND videoio_srcs ${CMAKE_CURRENT_LIST_DIR}/src/cap_openni2.cpp)
   list(APPEND tgts ocv.3rdparty.openni2)

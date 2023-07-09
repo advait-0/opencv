@@ -11,6 +11,7 @@
 using namespace cv;
 using namespace libcamera;
 
+namespace cv{
 class CvCapture_libcamera_proxy CV_FINAL : public cv::IVideoCapture
 {
 public:
@@ -18,19 +19,10 @@ public:
     {
     }
 
+    bool open(int index);
     bool isOpened() const CV_OVERRIDE
     {
-        std::unique_ptr<CameraManager> cm = std::make_unique<CameraManager>();
-
-        cm->start();
-        if (cm->cameras().empty()) {
-            std::cout << "No cameras available" << std::endl;
-        } else {
-            std::cout << "Cameras available: " << cm->cameras().size() << std::endl;
-        }
-	cm->stop();
-
-        return true;
+       return opened;
     }
 
     bool grabFrame() CV_OVERRIDE
@@ -44,9 +36,43 @@ public:
     }
 
     virtual int getCaptureDomain() CV_OVERRIDE { return CAP_LIBCAMERA; }
+
+    private:
+    bool opened;
 };
 
-namespace cv {
+bool CvCapture_libcamera_proxy::open(int index)
+{
+    if (isOpened()) 
+    {
+        std::cout<<"Line 61 is opened works";
+    }
+    try
+    {
+        std::unique_ptr<CameraManager> cm = std::make_unique<CameraManager>();
+
+        cm->start();
+        if (cm->cameras().empty()) 
+        {
+            std::cout << "No cameras available" << std::endl;
+        } 
+        else 
+        {
+            std::cout << "Cameras available: " << cm->cameras().size() << std::endl;
+            throw 407;
+        }
+	    cm->stop();
+        opened = true;
+        return true;
+    }
+    catch(const std::exception& e)
+    {
+        std::cerr << e.what() << '\n';
+        std::cout<<"Try failed";
+        return false;
+    }
+    
+}
 
 cv::Ptr<cv::IVideoCapture> create_libcamera_capture_cam(int index)
 {
@@ -58,4 +84,4 @@ cv::Ptr<cv::IVideoCapture> create_libcamera_capture_cam(int index)
 
     return cv::Ptr<cv::IVideoCapture>();
 } 
-}
+}//namespace cv 

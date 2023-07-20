@@ -1,119 +1,161 @@
 #include "precomp.hpp"
+
 #include <iostream>
 #include <memory>
+#include "cap_interface.hpp"
 #include <opencv2/core.hpp>
+#include <opencv2/videoio.hpp>
 #include <libcamera/libcamera.h>
 
 using namespace cv;
 using namespace libcamera;
 
-struct CvCapture_libcamera
-{
-    bool open(const char* filename, const VideoCaptureParameters& params);
-    void close();
-    double getProperty(int) const;
-    bool grabFrame();
-};
-
-namespace cv {
-namespace {
+namespace cv{
 class CvCapture_libcamera_proxy CV_FINAL : public cv::IVideoCapture
 {
-    public:
-    bool isOpened_ = false;
-    bool grabFrame_=false;
-    bool retrieveFrame_=false;
-    CvCapture_libcamera_proxy() 
-    {
-        libcameraCapture=NULL;
-       
-        
-
-        // Check if cameras are available
-
-        grabFrame_=false;
-        retrieveFrame_=false;
-        
-    }
-    //Return necessary values to resolve build errors
-    bool isOpened() const CV_OVERRIDE
+public:
+    CvCapture_libcamera_proxy()
     {
         std::unique_ptr<CameraManager> cm = std::make_unique<CameraManager>();
         cm->start();
-        if (cm->cameras().empty()) 
-        {
-            
-            std::cout << "No cameras available" << std::endl;
-            cm->stop();
-            isOpened_ = false;
-        }
-        else 
-        {
-            isOpened_ = true;
-            std::cout << "Cameras available" << std::endl;
-        }
-      return isOpened_;
+        static std::shared_ptr<Camera> camera;
     }
 
-    bool grabFrame() CV_OVERRIDE
+    CvCapture_libcamera_proxy(int index)
     {
-      return false;
+        std::unique_ptr<CameraManager> cm = std::make_unique<CameraManager>();
+        cm->start();
+        static std::shared_ptr<Camera> camera;
+        std::string cameraId = cm->cameras()[index]->id();
+	    if(!cameraId.empty())
+        {
+          open(index);
+        }
     }
+
+    bool open(int index);
+
+    bool isOpened() const CV_OVERRIDE
+    {
+       return opened;
+    }
+
+    bool grabFrame() CV_OVERRIDE;
+
 
     bool retrieveFrame(int, OutputArray) CV_OVERRIDE
     {
-      return false;
+        return false;
     }
+
     virtual int getCaptureDomain() CV_OVERRIDE { return CAP_LIBCAMERA; }
 
+    private:
+    bool opened=false;
+    bool grabFrame_check;
+    bool grabbedinOpen;
+
     protected:
-    CvCapture_libcamera* libcameraCapture;
+    void cam_init();
+
 };
-} //anonymous namespace
-    cv::Ptr<cv::IVideoCapture> create_libcamera_capture_cam(int index)
+
+void CvCapture_libcamera_proxy::cam_init()
+{
+     std::cout<<"cam_init test";
+}
+
+bool CvCapture_libcamera_proxy::open(int index)
+{
+    std::cerr<<"Entered Open";
+    try
+    {
+        std::string cameraId = cm->cameras()[index]->id();
+        camera=cm->get(cameraId);
+        camera->acquire();
+
+        std::unique_ptr<CameraConfiguration> config =
+		camera->generateConfiguration( { StreamRole::VideoRecording } );
+
+        config->validate();
+	    std::cout << "Validated viewfinder configuration is: "
+		  << streamConfig.toString() << std::endl;
+	    camera->configure(config.get());
+
+        opened = true;
+        // return true;
+    }
+    catch(const std::exception& e)
+    {
+        std::cerr << e.what() << '\n';
+        std::cout<<"Try failed";
+        opened=false;
+    }
+    return opened;
+}
+
+bool CvCapture_libcamera_proxy::grabFrame()
+{
+    FrameBufferAllocator *allocator = new FrameBufferAllocator(camera);
+
+	for (StreamConfiguration &cfg : *config) {
+		int ret = allocator->allocate(cfg.stream());
+		if (ret < 0) {
+			std::cerr << "Can't allocate buffers" << std::endl;
+			return false;
+		}
+
+		size_t allocated = allocator->buffers(cfg.stream()).size();
+		std::cout << "Allocated " << allocated << " buffers for stream" << std::endl;
+	}
+
+    	Stream *stream = streamConfig.stream();
+	const std::vector<std::unique_ptr<FrameBuffer>> &buffers = allocator->buffers(stream);
+	std::vector<std::unique_ptr<Request>> requests;
+	for (unsigned int i = 0; i < buffers.size(); ++i) {
+		std::unique_ptr<Request> request = camera->createRequest();
+		if (!request)
+		{
+			std::cerr << "Can't create request" << std::endl;
+			return false;
+		}
+
+		const std::unique_ptr<FrameBuffer> &buffer = buffers[i];
+		int ret = request->addBuffer(stream, buffer.get());
+		if (ret < 0)
+		{
+			std::cerr << "Can't set buffer for request"
+				  << std::endl;
+			return false;
+		}
+
+		ControlList &controls = request->controls();
+		controls.set(controls::Brightness, 0.5);
+
+		requests.push_back(std::move(request));
+	}
+
+    // camera->requestCompleted.connect(requestComplete);
+
+    camera->start();
+	for (std::unique_ptr<Request> &request : requests)
+    {
+		camera->queueRequest(request.get());
+    }
+    std::cout<<"Buffers have been queued";
+    grabFrame_check=true;
+    return true;
+}
+
+cv::Ptr<cv::IVideoCapture> create_libcamera_capture_cam(int index)
 {
     cv::Ptr<CvCapture_libcamera_proxy> capture = cv::makePtr<CvCapture_libcamera_proxy>();
-    std::cout<<index;
-     // Testing
-    if (capture && capture->isOpened())
+
+    std::cout << "index passed to create_libcamera_capture_cam : " << index << std::endl;
+    if (capture)
         return capture;
+
     return cv::Ptr<cv::IVideoCapture>();
-} 
-}//cv namespace
-
-int main()
-{
-    std::unique_ptr<CameraManager> cm = std::make_unique<CameraManager>();
-    cm->start();
-    if (cm->cameras().empty()) 
-    {
-        std::cout << "No cameras were identified on the system" << std::endl;
-        cm->stop();
-        return EXIT_FAILURE;
-    }
-
-    for (const auto& cam : cm->cameras())
-        std::cout << "Camera Found : " << cam->id() << std::endl;
-
-    
-    CvCapture_libcamera_proxy *cap = nullptr;
-    int ind=0;
-    cap = new CvCapture_libcamera_proxy();
-        std::cout<<ind;
-        if (cap->isOpened())
-        {
-            //Call the create_libcamera_capture_cam function and pass int parameter
-            cv::Ptr<cv::IVideoCapture> videoCapture = create_libcamera_capture_cam(ind);
-            if (videoCapture)
-            {
-            std::cout << "Camera available main";
-            return true;
-            }
-            std::cout<<"Camera available main";
-            return true;
-        }
-
-    
-    delete cap;
-    return 0;
 }
+
+}//namespace cv 

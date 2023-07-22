@@ -14,23 +14,13 @@ namespace cv{
 class CvCapture_libcamera_proxy CV_FINAL : public cv::IVideoCapture
 {
 public:
-    CvCapture_libcamera_proxy()
+   CvCapture_libcamera_proxy(int index = 0)
     {
-        std::unique_ptr<CameraManager> cm = std::make_unique<CameraManager>();
+        ind = index;
+        cm = std::make_unique<CameraManager>();
         cm->start();
-        static std::shared_ptr<Camera> camera;
-    }
-
-    CvCapture_libcamera_proxy(int index)
-    {
-        std::unique_ptr<CameraManager> cm = std::make_unique<CameraManager>();
-        cm->start();
-        static std::shared_ptr<Camera> camera;
-        std::string cameraId = cm->cameras()[index]->id();
-	    if(!cameraId.empty())
-        {
-          open(index);
-        }
+        cameraId = cm->cameras()[ind]->id();
+        cam_init();
     }
 
     bool open(int index);
@@ -51,18 +41,36 @@ public:
     virtual int getCaptureDomain() CV_OVERRIDE { return CAP_LIBCAMERA; }
 
     private:
+    int ind;
+    std::unique_ptr<CameraManager> cm;
+    std::shared_ptr<Camera> camera;
+    std::string cameraId;
     bool opened=false;
     bool grabFrame_check;
     bool grabbedinOpen;
 
     protected:
     void cam_init();
+    void cam_init(int index);
 
 };
 
 void CvCapture_libcamera_proxy::cam_init()
 {
-     std::cout<<"cam_init test";
+    
+    if(!cameraId.empty()) 
+    {
+       open(ind);
+    }
+}
+
+void CvCapture_libcamera_proxy::cam_init(int index)
+{
+    if(!cameraId.empty()) 
+    {
+       open(index);
+    }
+    
 }
 
 bool CvCapture_libcamera_proxy::open(int index)
@@ -70,7 +78,7 @@ bool CvCapture_libcamera_proxy::open(int index)
     std::cerr<<"Entered Open";
     try
     {
-        std::string cameraId = cm->cameras()[index]->id();
+        cameraId = cm->cameras()[index]->id();
         camera=cm->get(cameraId);
         camera->acquire();
 
@@ -78,6 +86,7 @@ bool CvCapture_libcamera_proxy::open(int index)
 		camera->generateConfiguration( { StreamRole::VideoRecording } );
 
         config->validate();
+        StreamConfiguration &streamConfig = config->at(index);
 	    std::cout << "Validated viewfinder configuration is: "
 		  << streamConfig.toString() << std::endl;
 	    camera->configure(config.get());
@@ -96,55 +105,56 @@ bool CvCapture_libcamera_proxy::open(int index)
 
 bool CvCapture_libcamera_proxy::grabFrame()
 {
-    FrameBufferAllocator *allocator = new FrameBufferAllocator(camera);
+    // FrameBufferAllocator *allocator = new FrameBufferAllocator(camera);
 
-	for (StreamConfiguration &cfg : *config) {
-		int ret = allocator->allocate(cfg.stream());
-		if (ret < 0) {
-			std::cerr << "Can't allocate buffers" << std::endl;
-			return false;
-		}
+	// for (StreamConfiguration &cfg : *config) {
+	// 	int ret = allocator->allocate(cfg.stream());
+	// 	if (ret < 0) {
+	// 		std::cerr << "Can't allocate buffers" << std::endl;
+	// 		return false;
+	// 	}
 
-		size_t allocated = allocator->buffers(cfg.stream()).size();
-		std::cout << "Allocated " << allocated << " buffers for stream" << std::endl;
-	}
+	// 	size_t allocated = allocator->buffers(cfg.stream()).size();
+	// 	std::cout << "Allocated " << allocated << " buffers for stream" << std::endl;
+	// }
 
-    	Stream *stream = streamConfig.stream();
-	const std::vector<std::unique_ptr<FrameBuffer>> &buffers = allocator->buffers(stream);
-	std::vector<std::unique_ptr<Request>> requests;
-	for (unsigned int i = 0; i < buffers.size(); ++i) {
-		std::unique_ptr<Request> request = camera->createRequest();
-		if (!request)
-		{
-			std::cerr << "Can't create request" << std::endl;
-			return false;
-		}
+    // 	Stream *stream = streamConfig.stream();
+	// const std::vector<std::unique_ptr<FrameBuffer>> &buffers = allocator->buffers(stream);
+	// std::vector<std::unique_ptr<Request>> requests;
+	// for (unsigned int i = 0; i < buffers.size(); ++i) {
+	// 	std::unique_ptr<Request> request = camera->createRequest();
+	// 	if (!request)
+	// 	{
+	// 		std::cerr << "Can't create request" << std::endl;
+	// 		return false;
+	// 	}
 
-		const std::unique_ptr<FrameBuffer> &buffer = buffers[i];
-		int ret = request->addBuffer(stream, buffer.get());
-		if (ret < 0)
-		{
-			std::cerr << "Can't set buffer for request"
-				  << std::endl;
-			return false;
-		}
+	// 	const std::unique_ptr<FrameBuffer> &buffer = buffers[i];
+	// 	int ret = request->addBuffer(stream, buffer.get());
+	// 	if (ret < 0)
+	// 	{
+	// 		std::cerr << "Can't set buffer for request"
+	// 			  << std::endl;
+	// 		return false;
+	// 	}
 
-		ControlList &controls = request->controls();
-		controls.set(controls::Brightness, 0.5);
+	// 	ControlList &controls = request->controls();
+	// 	controls.set(controls::Brightness, 0.5);
 
-		requests.push_back(std::move(request));
-	}
+	// 	requests.push_back(std::move(request));
+	// }
 
-    // camera->requestCompleted.connect(requestComplete);
+    // // camera->requestCompleted.connect(requestComplete);
 
-    camera->start();
-	for (std::unique_ptr<Request> &request : requests)
-    {
-		camera->queueRequest(request.get());
-    }
-    std::cout<<"Buffers have been queued";
-    grabFrame_check=true;
-    return true;
+    // camera->start();
+	// for (std::unique_ptr<Request> &request : requests)
+    // {
+	// 	camera->queueRequest(request.get());
+    // }
+    // std::cout<<"Buffers have been queued";
+    // grabFrame_check=true;
+    // return true;
+    return false;
 }
 
 cv::Ptr<cv::IVideoCapture> create_libcamera_capture_cam(int index)

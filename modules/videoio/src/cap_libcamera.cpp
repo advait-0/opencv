@@ -50,21 +50,21 @@ public:
     bool opened_=false;
     bool grabFrame_check;
     bool grabbedinOpen;
-    size_t allocated_;
+    unsigned int allocated_;
+    int reqlen_=0;
 
     protected:
     void cam_init();
     void cam_init(int index);
     static void processRequest(Request *request);
     static void requestComplete(Request *request);
-
+   
 };
 
 std::unique_ptr<CameraConfiguration> CvCapture_libcamera_proxy::config_;
 std::unique_ptr<CameraManager> CvCapture_libcamera_proxy::cm_;
 std::string CvCapture_libcamera_proxy::cameraId_;
 std::shared_ptr<Camera> CvCapture_libcamera_proxy::camera_;
-
 
 void CvCapture_libcamera_proxy::cam_init()
 {
@@ -88,20 +88,18 @@ void CvCapture_libcamera_proxy::requestComplete(Request *request)
 {
 	if (request->status() == Request::RequestCancelled)
     {
+        std::cout<<"requestComplete Successful"<<std::endl;
 		return;
     }
-
-	processRequest(request);
+    processRequest(request);
 }
 
 void CvCapture_libcamera_proxy::processRequest(Request *request)
 {
 	std::cerr<< "Request completed: " << request->toString() << std::endl;
-
     const Request::BufferMap &buffers = request->buffers();
 	for (auto bufferPair : buffers) 
     {
-		// (Unused) Stream *stream = bufferPair.first;
 		FrameBuffer *buffer = bufferPair.second;
 		const FrameMetadata &metadata = buffer->metadata();
 
@@ -110,7 +108,6 @@ void CvCapture_libcamera_proxy::processRequest(Request *request)
 	request->reuse(Request::ReuseBuffers);
 	camera_->queueRequest(request);
 }
-
 
 bool CvCapture_libcamera_proxy::open(int index)
 {
@@ -143,15 +140,14 @@ bool CvCapture_libcamera_proxy::open(int index)
 
 bool CvCapture_libcamera_proxy::grabFrame()
 {
+    unsigned int nbuffers = UINT_MAX;
     int ret=0;
     if(opened_==false)
     {
         open(0);
     }
     std::unique_ptr<FrameBufferAllocator> allocator;
-    // FrameBufferAllocator *allocator = new FrameBufferAllocator(camera);
     allocator = std::make_unique<FrameBufferAllocator>(camera_);
-    // Stream *stream;
 	for (StreamConfiguration &cfg : *config_) 
     {
 		ret = allocator->allocate(cfg.stream());
@@ -162,12 +158,12 @@ bool CvCapture_libcamera_proxy::grabFrame()
 		}
 
 		allocated_ = allocator->buffers(cfg.stream()).size();
+        nbuffers=std::min(nbuffers, allocated_);
 		std::cout << "Allocated " << allocated_ << " buffers for stream" << std::endl;
-        
-	}
+    }
     
 	std::vector<std::unique_ptr<Request>> requests;
-	for (unsigned int i = 0; i < allocated_; ++i) 
+	for (unsigned int i = 0; i < nbuffers; i++) 
     {
         std::cout<<"Creating Requests"<<std::endl;
 		std::unique_ptr<Request> request = camera_->createRequest();
@@ -193,8 +189,15 @@ bool CvCapture_libcamera_proxy::grabFrame()
 			}
         }
 		requests.push_back(std::move(request));
-    }   
-    camera_->requestCompleted.connect(requestComplete);
+        reqlen_ = requests.size();
+        std::cout<<"internal request size: "<<requests.size()<<std::endl;
+    }
+    if(requests.size()==nbuffers)
+        {
+          std::cout<<"Connected"<<std::endl;
+          camera_->requestCompleted.connect(requestComplete);
+          reqlen_=0;
+        }
 
     camera_->start();
     for (std::unique_ptr<Request> &request : requests)
@@ -204,7 +207,6 @@ bool CvCapture_libcamera_proxy::grabFrame()
     }
 
     camera_->stop();
-	// allocator->free(stream);
 	allocator.reset();
 	camera_->release();
 	camera_.reset();
@@ -216,7 +218,6 @@ bool CvCapture_libcamera_proxy::grabFrame()
 // {
 
 // }
-
 
 cv::Ptr<cv::IVideoCapture> create_libcamera_capture_cam(int index)
 {

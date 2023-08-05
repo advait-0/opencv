@@ -2,6 +2,7 @@
 
 #include <iostream>
 #include <memory>
+#include<queue>
 #include <opencv2/core.hpp>
 #include <opencv2/videoio.hpp>
 #include <libcamera/libcamera.h>
@@ -40,11 +41,9 @@ public:
     {
         if (opened_)
         {
-            // Stop camera and release resources
             camera_->stop();
             allocator.reset();
             camera_->release();
-            camera_.reset();
             cm_->stop();
         }
     }
@@ -56,7 +55,7 @@ public:
     static std::unique_ptr<CameraManager> cm_;
     static std::shared_ptr<Camera> camera_;
     static std::string cameraId_;
-    static std::vector<std::unique_ptr<Request>> completedRequests_;
+    static std::queue<Request*> completedRequests_;
     bool opened_=false;
     unsigned int allocated_;
     int reqlen_=0;
@@ -64,6 +63,7 @@ public:
     protected:
     void cam_init();
     void cam_init(int index);
+    std::unique_ptr<Request> request;
     std::vector<std::unique_ptr<Request>> requests;
     std::unique_ptr<FrameBufferAllocator> allocator;
     static void processRequest(Request *request);
@@ -71,7 +71,8 @@ public:
 
 };
 
-std::vector<std::unique_ptr<Request>> CvCapture_libcamera_proxy::completedRequests_;
+
+std::queue<Request*> CvCapture_libcamera_proxy::completedRequests_;
 std::unique_ptr<CameraConfiguration> CvCapture_libcamera_proxy::config_;
 std::unique_ptr<CameraManager> CvCapture_libcamera_proxy::cm_;
 std::string CvCapture_libcamera_proxy::cameraId_;
@@ -111,16 +112,14 @@ void CvCapture_libcamera_proxy::processRequest(Request *request)
 {
     std::cout<<"Entered processRequest"<<std::endl;
 	std::cerr<< "Request completed: " << request->toString() << std::endl;
-    completedRequests_.emplace_back(std::move(request));
-	request->reuse(Request::ReuseBuffers);
-	camera_->queueRequest(request);
+    completedRequests_.push(request);
     std::cout<<"Reusing requests"<<std::endl;
 }
 
 bool CvCapture_libcamera_proxy::open(int index)
 {
     unsigned int nbuffers = UINT_MAX;
-    int ret=0;
+    int ret=0; 
     std::cerr<<"Entered Open";
     try
     {
@@ -154,7 +153,7 @@ bool CvCapture_libcamera_proxy::open(int index)
         for (unsigned int i = 0; i < nbuffers; i++) 
         {
             std::cout<<"Creating Requests"<<std::endl;
-		    std::unique_ptr<Request> request = camera_->createRequest();
+		    request = camera_->createRequest();
 		    if (!request)
             {
                 std::cerr << "Can't create request" << std::endl;
@@ -187,7 +186,7 @@ bool CvCapture_libcamera_proxy::open(int index)
     catch(const std::exception& e)
     {
         std::cerr << e.what() << '\n';
-        std::cout<<"CvCapture_libcamera_proxy failed";
+        std::cout<<"CvCapture_libcamera_proxy::open failed";
         opened_=false;
     }
     return opened_;
@@ -211,8 +210,15 @@ bool CvCapture_libcamera_proxy::grabFrame()
 
 bool CvCapture_libcamera_proxy::retrieveFrame(int, OutputArray)
 {
-    std::cout<<completedRequests_.front().get()<<std::endl;
-    completedRequests_.erase(completedRequests_.begin());
+    std::cout<<"Retrieved Frame "<<completedRequests_.front()->sequence()<<std::endl;
+    auto var = completedRequests_.front();
+    completedRequests_.pop();
+    //var stores the first value of the queue
+    //Mat handling to be done here
+
+    request->reuse(Request::ReuseBuffers);
+	camera_->queueRequest(request.get());
+
     return true;
 }
 

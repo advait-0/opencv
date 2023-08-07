@@ -2,7 +2,7 @@
 
 #include <iostream>
 #include <memory>
-#include<queue>
+#include <queue>
 #include <opencv2/core.hpp>
 #include <opencv2/videoio.hpp>
 #include <libcamera/libcamera.h>
@@ -177,8 +177,15 @@ bool CvCapture_libcamera_proxy::open(int index)
             reqlen_ = requests.size();
             std::cout<<"internal request size: "<<requests.size()<<std::endl;
         }
+
+        
         camera_->requestCompleted.connect(requestComplete);
         camera_->start();
+        for (std::unique_ptr<Request> &request : requests)
+        {
+         	camera_->queueRequest(request.get());
+            std::cout<<"Request getting queued"<<std::endl;
+        }
         opened_ = true;
         // return true;
     }
@@ -198,26 +205,25 @@ bool CvCapture_libcamera_proxy::grabFrame()
     {
         open(0);
     }
-
-    for (std::unique_ptr<Request> &request : requests)
-    {
-     	camera_->queueRequest(request.get());
-        std::cout<<"Request getting queued"<<std::endl;
-    }
  
     return true;
 }
 
 bool CvCapture_libcamera_proxy::retrieveFrame(int, OutputArray)
 {
+    if(completedRequests_.empty())
+    {
+        return false;
+    }
+    std::cout<<"retrieveFrame"<<std::endl;
     std::cout<<"Retrieved Frame "<<completedRequests_.front()->sequence()<<std::endl;
-    auto var = completedRequests_.front();
+    auto nextProcessedRequest = completedRequests_.front();
     completedRequests_.pop();
     //var stores the first value of the queue
     //Mat handling to be done here
 
-    request->reuse(Request::ReuseBuffers);
-	camera_->queueRequest(request.get());
+    nextProcessedRequest->reuse(Request::ReuseBuffers);
+	camera_->queueRequest(nextProcessedRequest);
 
     return true;
 }

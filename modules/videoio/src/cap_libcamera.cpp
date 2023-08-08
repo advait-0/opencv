@@ -71,7 +71,6 @@ public:
 
 };
 
-
 std::queue<Request*> CvCapture_libcamera_proxy::completedRequests_;
 std::unique_ptr<CameraConfiguration> CvCapture_libcamera_proxy::config_;
 std::unique_ptr<CameraManager> CvCapture_libcamera_proxy::cm_;
@@ -113,7 +112,6 @@ void CvCapture_libcamera_proxy::processRequest(Request *request)
     std::cout<<"Entered processRequest"<<std::endl;
 	std::cerr<< "Request completed: " << request->toString() << std::endl;
     completedRequests_.push(request);
-    std::cout<<"Reusing requests"<<std::endl;
 }
 
 bool CvCapture_libcamera_proxy::open(int index)
@@ -201,6 +199,7 @@ bool CvCapture_libcamera_proxy::open(int index)
 
 bool CvCapture_libcamera_proxy::grabFrame()
 {
+    std::cout<<opened_<<std::endl;
     if(opened_==false)
     {
         open(0);
@@ -213,17 +212,22 @@ bool CvCapture_libcamera_proxy::retrieveFrame(int, OutputArray)
 {
     if(completedRequests_.empty())
     {
-        return false;
+        std::cout<<"completedRequests is empty"<<std::endl;
+        // return false;
     }
     std::cout<<"retrieveFrame"<<std::endl;
     std::cout<<"Retrieved Frame "<<completedRequests_.front()->sequence()<<std::endl;
     auto nextProcessedRequest = completedRequests_.front();
     completedRequests_.pop();
+    
     //var stores the first value of the queue
     //Mat handling to be done here
 
+    std::cout<<"Reusing buffer in processRequest"<<std::endl;
     nextProcessedRequest->reuse(Request::ReuseBuffers);
+    std::cout<<"retrieveFrame Request Queued"<<std::endl;
 	camera_->queueRequest(nextProcessedRequest);
+ 
 
     return true;
 }

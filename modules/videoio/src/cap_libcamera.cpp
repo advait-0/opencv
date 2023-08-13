@@ -37,6 +37,8 @@ public:
 
     virtual int getCaptureDomain() CV_OVERRIDE { return CAP_LIBCAMERA; }
 
+    void convertToRgb();
+
     ~CvCapture_libcamera_proxy()
     {
         if (opened_)
@@ -112,6 +114,41 @@ void CvCapture_libcamera_proxy::processRequest(Request *request)
     std::cout<<"Entered processRequest"<<std::endl;
 	std::cerr<< "Request completed: " << request->toString() << std::endl;
     completedRequests_.push(request);
+}
+
+void CvCapture_libcamera_proxy::convertToRgb()
+{
+    cv::Size imageSize;
+    auto imgWidth=streamConfig_.size.width;
+    auto imgHeight=streamConfig_.size.height;
+    imageSize = cv::Size(imgWidth, imgHeight);
+
+    for (const StreamConfiguration &cfg : *config_) 
+    {
+		const StreamFormats &formats = cfg.formats();
+        PixelFormat pixFormat=formats.pixelformats()[0];
+        std::cout<<pixFormat<<std::endl;
+		for (PixelFormat pixelformat : formats.pixelformats()) 
+        {
+			std::cout << " * Pixelformat: " << pixelformat<< std::endl;
+		}
+    }
+/*
+    switch(pixFormat)
+    {
+        case(YUVY):
+        {
+            cv::Mat destination(imageSize, CV_8UC3, nextProcessedRequest);
+            cv::cvtColor(cv::Mat(imageSize, CV_8UC2, nextProcessedRequest), destination, COLOR_YUV2BGR_YUYV);
+          
+        }
+        case(MJPEG):
+        {
+            CV_LOG_DEBUG(NULL, "VIDEOIO(V4L2:" << deviceName << "): decoding JPEG frame: size=" << currentBuffer.bytesused);
+            cv::imdecode(Mat(1, currentBuffer.bytesused, CV_8U, start), IMREAD_COLOR, &destination);
+        }
+    }
+*/
 }
 
 bool CvCapture_libcamera_proxy::open(int index)
@@ -219,16 +256,20 @@ bool CvCapture_libcamera_proxy::retrieveFrame(int, OutputArray)
     std::cout<<"Retrieved Frame "<<completedRequests_.front()->sequence()<<std::endl;
     auto nextProcessedRequest = completedRequests_.front();
     completedRequests_.pop();
-    
-    //var stores the first value of the queue
-    //Mat handling to be done here
+    convertToRgb();
 
+/*
+    V4L2 comments for reference
+    start = (unsigned char*)buffers[MAX_V4L_BUFFERS].memories[MEMORY_ORIG].start; 
+    frame.imageData = (char *)buffers[MAX_V4L_BUFFERS].memories[MEMORY_ORIG].start;
+    var stores the first value of the queue
+    Mat handling to be done here
+*/
     std::cout<<"Reusing buffer in processRequest"<<std::endl;
     nextProcessedRequest->reuse(Request::ReuseBuffers);
     std::cout<<"retrieveFrame Request Queued"<<std::endl;
 	camera_->queueRequest(nextProcessedRequest);
  
-
     return true;
 }
 

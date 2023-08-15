@@ -1,11 +1,17 @@
 #include "precomp.hpp"
 
 #include <iostream>
+#include <sys/mman.h>
+#include <errno.h>
 #include <memory>
 #include <queue>
+#include <map>
+#include <unistd.h>
 #include <opencv2/core.hpp>
 #include <opencv2/videoio.hpp>
 #include <libcamera/libcamera.h>
+
+#include <libcamera/base/log.h>
 
 using namespace cv;
 using namespace libcamera;
@@ -37,7 +43,7 @@ public:
 
     virtual int getCaptureDomain() CV_OVERRIDE { return CAP_LIBCAMERA; }
 
-    void convertToRgb();
+    std::vector<FrameBuffer::Plane> convertToRgb(libcamera::Request*&);
 
     ~CvCapture_libcamera_proxy()
     {
@@ -58,6 +64,8 @@ public:
     static std::shared_ptr<Camera> camera_;
     static std::string cameraId_;
     static std::queue<Request*> completedRequests_;
+    std::vector<libcamera::FrameBuffer::Plane> planes_;
+    std::vector<std::pair<void *, size_t>> maps_;
     bool opened_=false;
     unsigned int allocated_;
     int reqlen_=0;
@@ -116,24 +124,86 @@ void CvCapture_libcamera_proxy::processRequest(Request *request)
     completedRequests_.push(request);
 }
 
-void CvCapture_libcamera_proxy::convertToRgb()
+std::vector<FrameBuffer::Plane> CvCapture_libcamera_proxy::convertToRgb(libcamera::Request*&)
 {
     cv::Size imageSize;
     auto imgWidth=streamConfig_.size.width;
     auto imgHeight=streamConfig_.size.height;
+    Request *req;
     imageSize = cv::Size(imgWidth, imgHeight);
 
     for (const StreamConfiguration &cfg : *config_) 
     {
 		const StreamFormats &formats = cfg.formats();
+        FrameBuffer *buffer = req->findBuffer(cfg.stream());
         PixelFormat pixFormat=formats.pixelformats()[0];
         std::cout<<pixFormat<<std::endl;
-		for (PixelFormat pixelformat : formats.pixelformats()) 
-        {
-			std::cout << " * Pixelformat: " << pixelformat<< std::endl;
+		// for (PixelFormat pixelformat : formats.pixelformats()) 
+        // {
+		// 	std::cout << " * Pixelformat: " << pixelformat<< std::endl;
+		// }
+    
+
+    CV_ASSERT(!buffer->planes().empty());
+	planes_.reserve(buffer->planes().size());
+
+	int mmapFlags = 0;
+
+	// if (flags & MapFlag::Read)
+		// mmapFlags |= PROT_READ;
+
+	// if (flags & MapFlag::Write)
+		mmapFlags |= PROT_WRITE;
+
+	struct MappedBufferInfo {
+		uint8_t *address = nullptr;
+		size_t mapLength = 0;
+		size_t dmabufLength = 0;
+	};
+	std::map<int, MappedBufferInfo> mappedBuffers;
+
+	for (const FrameBuffer::Plane &plane : buffer->planes()) {
+		const int fd = plane.fd.get();
+		if (mappedBuffers.find(fd) == mappedBuffers.end()) {
+			const size_t length = lseek(fd, 0, SEEK_END);
+			mappedBuffers[fd] = MappedBufferInfo{ nullptr, 0, length };
 		}
+
+		const size_t length = mappedBuffers[fd].dmabufLength;
+
+		if (plane.offset > length ||
+		    plane.offset + plane.length > length) {
+			// CV_LOG(Buffer, Fatal) << "plane is out of buffer: "
+			// 		   << "buffer length=" << length
+			// 		   << ", plane offset=" << plane.offset
+			// 		   << ", plane length=" << plane.length;
+		}
+		size_t &mapLength = mappedBuffers[fd].mapLength;
+		mapLength = std::max(mapLength,static_cast<size_t>(plane.offset + plane.length));
+	}
+
+	for (const FrameBuffer::Plane &plane : buffer->planes()) {
+		const int fd = plane.fd.get();
+		auto &info = mappedBuffers[fd];
+		if (!info.address) {
+			void *address = mmap(nullptr, info.mapLength, mmapFlags,
+					     MAP_SHARED, fd, 0);
+			if (address == MAP_FAILED) {
+				error_ = -errno;
+				// LOG(Buffer, Error) << "Failed to mmap plane: "
+				// 		   << strerror(-error_);
+			}
+
+			info.address = static_cast<uint8_t *>(address);
+			maps_.emplace_back(info.address, info.mapLength);
+		}
+
+		planes_.emplace_back(info.address + plane.offset, plane.length);
+	}
     }
-/*
+    return planes_;
+    }
+/*  
     switch(pixFormat)
     {
         case(YUVY):
@@ -149,7 +219,6 @@ void CvCapture_libcamera_proxy::convertToRgb()
         }
     }
 */
-}
 
 bool CvCapture_libcamera_proxy::open(int index)
 {
@@ -256,7 +325,7 @@ bool CvCapture_libcamera_proxy::retrieveFrame(int, OutputArray)
     std::cout<<"Retrieved Frame "<<completedRequests_.front()->sequence()<<std::endl;
     auto nextProcessedRequest = completedRequests_.front();
     completedRequests_.pop();
-    convertToRgb();
+    convertToRgb(nextProcessedRequest);
 
 /*
     V4L2 comments for reference
@@ -283,5 +352,4 @@ cv::Ptr<cv::IVideoCapture> create_libcamera_capture_cam(int index)
 
     return cv::Ptr<cv::IVideoCapture>();
 }
-
 }//namespace cv 

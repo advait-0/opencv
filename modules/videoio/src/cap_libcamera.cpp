@@ -193,7 +193,7 @@ Mat CvCapture_libcamera_proxy::convertToRgb(libcamera::Request *req)
 
 		planes_.emplace_back(info.address + plane.offset, plane.length);
         cv::Mat bgrMat_(imageSize, CV_8U, info.address + plane.offset);
-        cv::imdecode(Mat(1, info.mapLength, CV_8U, info.address), IMREAD_COLOR, &bgrMat_);
+        cv::imdecode(Mat(1,info.mapLength, CV_8U, info.address), IMREAD_COLOR, &bgrMat_);
         icount++;
 	}
     }
@@ -277,7 +277,7 @@ bool CvCapture_libcamera_proxy::open(int index)
             }
             requests_.push_back(std::move(request));
             reqlen_ = requests_.size();
-            std::cout<<"internal request size: "<<requests_.size()<<std::endl;requests
+            std::cout<<"internal request size: "<<requests_.size()<<std::endl;
         }
 
         

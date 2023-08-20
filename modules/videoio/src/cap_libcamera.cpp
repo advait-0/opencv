@@ -70,7 +70,7 @@ public:
     std::unique_ptr<FrameBufferAllocator> allocator_;
     bool opened_=false;
     unsigned int allocated_;
-    cv::Mat bgrMat_;
+    // cv::Mat bgrMat_;
     int reqlen_=0;
 
     protected:
@@ -124,25 +124,35 @@ void CvCapture_libcamera_proxy::processRequest(Request *request)
     completedRequests_.push(request);
 }
 
-Mat CvCapture_libcamera_proxy::convertToRgb(libcamera::Request *req)
+Mat CvCapture_libcamera_proxy::convertToRgb(Request *request)
 {
     cv::Size imageSize;
+    
+    FrameBuffer *buffer;
+    int fd;
     auto imgWidth=streamConfig_.size.width;
     auto imgHeight=streamConfig_.size.height;
+    long int bytesused = imgWidth*imgHeight*2;
+    auto imageData = (char *)cvAlloc(bytesused);
     std::cout<<"imgWidth: "<<imgWidth<<std::endl;
     std::cout<<"imgHeight: "<<imgHeight<<std::endl;
     imageSize = cv::Size(imgWidth, imgHeight);
 
+    libcamera::FrameBuffer *mb;
+    // cv::Mat bgrMat_(imageSize, CV_8UC3, imageData);
+
     for (const StreamConfiguration &cfg : *config_) 
     {
+        std::cout<<"convertToRGB Stride: "<<cfg.stride<<std::endl;
+        std::cout<<"Stride: "<<int(cfg.stride)<<std::endl;
 		const StreamFormats &formats = cfg.formats();
-        FrameBuffer *buffer = req->findBuffer(cfg.stream());
-        PixelFormat pixFormat=formats.pixelformats()[0];
+        buffer = request->findBuffer(cfg.stream());
+        PixelFormat pixFormat=formats.pixelformats()[1];
         std::cout<<pixFormat<<std::endl;
-
+    }
     // CV_ASSERT(!buffer->planes().empty());
-	planes_.reserve(buffer->planes().size());
-
+ 	planes_.reserve(buffer->planes().size());
+    // std::cout<<mb->metadata()<<std::endl;
 	int mmapFlags = 0;
 	mmapFlags |= PROT_READ;
 	mmapFlags |= PROT_WRITE;
@@ -153,18 +163,23 @@ Mat CvCapture_libcamera_proxy::convertToRgb(libcamera::Request *req)
 		size_t mapLength = 0;
 		size_t dmabufLength = 0;
 	};
+
 	std::map<int, MappedBufferInfo> mappedBuffers;
 
+    int planec=0;
 	for (const FrameBuffer::Plane &plane : buffer->planes()) 
     {
-		const int fd = plane.fd.get();
+        std::cout<<"No of Planes processed: "<<++planec<<std::endl;
+		fd = plane.fd.get();
 		if (mappedBuffers.find(fd) == mappedBuffers.end()) 
         {
+            std::cout<<"Entered mappedBuffers.find if"<<std::endl;
 			const size_t length = lseek(fd, 0, SEEK_END);
 			mappedBuffers[fd] = MappedBufferInfo{ nullptr, 0, length };
 		}
 
 		const size_t length = mappedBuffers[fd].dmabufLength;
+        std::cout<<"length: "<<length<<std::endl;
 
 		if (plane.offset > length || plane.offset + plane.length > length) 
         {
@@ -177,10 +192,16 @@ Mat CvCapture_libcamera_proxy::convertToRgb(libcamera::Request *req)
     int icount=0;
 	for (const FrameBuffer::Plane &plane : buffer->planes()) 
     {
-		const int fd = plane.fd.get();
+        // std::cout<<&plane;
+        sleep(1);
+        // FrameMetadata &metadatai = buffer->metadata();
+        // Mat tp(metadatai.planes());
+        std::cout<<"Entered mmap"<<std::endl;
+		fd = plane.fd.get();
 		auto &info = mappedBuffers[fd];
 		if (!info.address) 
         {
+            std::cout<<"info.address not empty"<<std::endl;
 			void *address = mmap(nullptr, info.mapLength, mmapFlags, MAP_SHARED, fd, 0);
 			if (address == MAP_FAILED) 
             {
@@ -190,15 +211,69 @@ Mat CvCapture_libcamera_proxy::convertToRgb(libcamera::Request *req)
 			info.address = static_cast<uint8_t *>(address);
 			maps_.emplace_back(info.address, info.mapLength);
 		}
+        std::cout<<"Maps Size: "<<maps_.size()<<std::endl;
+        // cv::Mat tempFrame(imageSize, CV_8UC1, info.address);
+        // std::cout<<"\ntempFrame Cols: "<<tempFrame.cols<<"\tRows :"<<tempFrame.rows<<"\tChannels :"<<tempFrame.channels()<<"\tTypes :"<<tempFrame.depth()<<std::endl;
 
 		planes_.emplace_back(info.address + plane.offset, plane.length);
+        std::cout<<"Planes Size: "<<planes_.size()<<std::endl;
+
+/*      TRIAL & ERROR CODE        
         // auto imageData = (char *)cvAlloc(imageSize.height);
-        cv::Mat bgrMat_(imageSize, CV_8UC3, info.address);
-        cv::imdecode(Mat(1,info.mapLength, CV_8U, info.address), IMREAD_COLOR, &bgrMat_);
-        std::cout<<"Cols: "<<bgrMat_.cols<<"\tRows :"<<bgrMat_.rows<<"\tChannels :"<<bgrMat_.channels()<<"\tTypes :"<<bgrMat_.depth()<<std::endl;
-        icount++;
-	}
+        // cv::Mat bgrMat_(imageSize, CV_8UC3, imageData);
+       
+        // std::cout<<"Cols: "<<bgrMat_.cols<<"\tRows :"<<bgrMat_.rows<<"\tChannels :"<<bgrMat_.channels()<<"\tTypes :"<<bgrMat_.depth()<<std::endl;
+
+        // cv::imdecode(Mat(1, bytesused, CV_8U, start), IMREAD_COLOR, &destination);
+
+        //
+       
+        // std::cout<<"Cols: "<<bgrMat_.cols<<"\tRows :"<<bgrMat_.rows<<"\tChannels :"<<bgrMat_.channels()<<"\tTypes :"<<bgrMat_.depth()<<std::endl;
+
+        //
+        // cv::Mat bgrMat_(imageSize.height, imageSize.width, CV_8UC2);
+        // std::memcpy(bgrMat_.data, planes[0].data(), planes[0].size());
+
+
+        //
+    //     std::vector<uint8_t> imageData;
+    //     for (const auto &span : planes_)
+    //     {
+    //         imageData.insert(imageData.end(), span.data(), span.data() + span.size());
+    //     }
+
+    // // Create a cv::Mat from the combined data
+    //    Mat bgrMat_(imageSize, CV_8UC3, imageData.data());
+
+        
+        //YUYV
+        // cv::cvtColor(tempFrame, bgrMat_, COLOR_YUV2BGR_YUYV)
+
+     
+    //  cv::Mat image(height, width, CV_8UC1, ptr, stride);
+    //  cv::imdecode(Mat(1,maps_[1], CV_8U, maps_[0]), IMREAD_COLOR, &bgrMat_);
+    
     }
+    
+    // uint8_t *ptr = static_cast<uint8_t *>(mmap(NULL, buffer->planes()[0].length, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0));
+    // Mat image(imgHeight, imgWidth, CV_8UC1, ptr, 16);
+    cv::Mat yuyvMat(imageSize.width, imageSize.height, CV_8UC2);
+
+// Copy the YUYV data from planes_ to the cv::Mat
+// for (int i = 0; i < imageSize.height; ++i) {
+//     for (int j = 0; j < imageSize.width * 2; j += 4) {
+//         yuyvMat.at<cv::Vec2b>(i, j / 2)[0] = planes_[0][i * imageSize.width * 2 + j];     // Y1
+//         yuyvMat.at<cv::Vec2b>(i, j / 2)[1] = planes_[1][i * imageSize.width * 2 + j + 1]; // U
+//         yuyvMat.at<cv::Vec2b>(i, j / 2)[2] = planes_[2][i * imageSize.width * 2 + j + 2]; // Y2
+//         yuyvMat.at<cv::Vec2b>(i, j / 2)[3] = planes_[2][i * imageSize.width * 2 + j + 3]; // V
+//     }
+// }
+*/
+
+    Mat image(imgWidth,imgHeight, CV_8UC3, Scalar(0,0,255));
+    return image;
+
+    icount++;
 
     // switch(pixFormat)
     // {
@@ -217,7 +292,7 @@ Mat CvCapture_libcamera_proxy::convertToRgb(libcamera::Request *req)
     //     }
     // }
 
-    return bgrMat_;
+    
 }    
 
 bool CvCapture_libcamera_proxy::open(int index)
@@ -243,6 +318,7 @@ bool CvCapture_libcamera_proxy::open(int index)
         allocator_ = std::make_unique<FrameBufferAllocator>(camera_);
 	    for (StreamConfiguration &cfg : *config_) 
         {
+            std::cout<<"Stride: "<<cfg.stride<<std::endl;
             ret = allocator_->allocate(cfg.stream());
 		    if (ret < 0) 
             {

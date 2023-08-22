@@ -293,7 +293,8 @@ Mat CvCapture_libcamera_proxy::convertToRgb(Request *request)
     // }
 
     
-}    
+}   
+} 
 
 bool CvCapture_libcamera_proxy::open(int index)
 {

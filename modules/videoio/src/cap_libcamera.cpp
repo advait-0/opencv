@@ -70,7 +70,6 @@ public:
     std::unique_ptr<FrameBufferAllocator> allocator_;
     bool opened_=false;
     unsigned int allocated_;
-    // cv::Mat bgrMat_;
     int reqlen_=0;
 
     protected:
@@ -188,7 +187,6 @@ Mat CvCapture_libcamera_proxy::convertToRgb(Request *request)
     
 	for (const FrameBuffer::Plane &plane : buffer->planes()) 
     {
-        sleep(1);
         std::cout<<"Entered mmap"<<std::endl;
 		fd = plane.fd.get();
 		auto &info = mappedBuffers[fd];
@@ -343,7 +341,7 @@ bool CvCapture_libcamera_proxy::retrieveFrame(int, OutputArray outputFrame)
     buf.copyTo(outputFrame);
 
     completedRequests_.pop();
-    return true;
+    
     
 /*
     V4L2 comments for reference
@@ -357,6 +355,7 @@ bool CvCapture_libcamera_proxy::retrieveFrame(int, OutputArray outputFrame)
     nextProcessedRequest->reuse(Request::ReuseBuffers);
     std::cout<<"retrieveFrame Request Queued"<<std::endl;
 	camera_->queueRequest(nextProcessedRequest);
+    return true;
 
 }
 

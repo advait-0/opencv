@@ -1,4 +1,3 @@
-set(CMAKE_CXX_STANDARD 17)
 set(VIDEOIO_ENABLE_PLUGINS_DEFAULT ON)
 if(EMSCRIPTEN OR IOS OR WINRT)
   set(VIDEOIO_ENABLE_PLUGINS_DEFAULT OFF)
@@ -141,6 +140,7 @@ if(TARGET ocv.3rdparty.v4l)
 endif()
 
 if(TARGET ocv.3rdparty.libcamera)
+  set(CMAKE_CXX_STANDARD 17)
   list(APPEND videoio_srcs ${CMAKE_CURRENT_LIST_DIR}/src/cap_libcamera.cpp)
   list(APPEND tgts ocv.3rdparty.libcamera)
 endif()

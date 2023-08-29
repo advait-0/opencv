@@ -180,7 +180,7 @@ int CvCapture_libcamera_proxy::mapFrameBuffer(const FrameBuffer *buffer)
 int CvCapture_libcamera_proxy::convertToRgb(Request *request, OutputArray &outImage)
 {
     int ret;
-    cv::Mat destination;
+    cv::Mat destination(streamConfig_.size.height, streamConfig_.size.width, CV_8UC2);
     FrameBuffer *fb = nullptr;
 
     const Request::BufferMap &buffers = request->buffers();
@@ -195,7 +195,7 @@ int CvCapture_libcamera_proxy::convertToRgb(Request *request, OutputArray &outIm
         return ret;
     }
 
-    cv::cvtColor(cv::Mat(streamConfig_.size.width, streamConfig_.size.height, CV_8UC2, planes_[0].data()),
+    cv::cvtColor(cv::Mat(streamConfig_.size.height, streamConfig_.size.width, CV_8UC2, planes_[0].data()),
                  destination, COLOR_YUV2BGR_YUYV);
     destination.copyTo(outImage);
 

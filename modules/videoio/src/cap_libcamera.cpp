@@ -23,7 +23,7 @@ class CvCapture_libcamera_proxy CV_FINAL : public cv::IVideoCapture
 public:
    CvCapture_libcamera_proxy(int index = 0)
     {
-        ind = 1;
+        ind = 0;
         cm_ = std::make_unique<CameraManager>();
         cm_->start();
         cameraId_ = cm_->cameras()[ind]->id();
@@ -284,7 +284,7 @@ bool CvCapture_libcamera_proxy::grabFrame()
     std::cout<<opened_<<std::endl;
     if(opened_==false)
     {
-        open(1);
+        open(0);
     }
  
     return true;

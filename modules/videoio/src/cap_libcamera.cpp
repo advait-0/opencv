@@ -30,100 +30,26 @@
  */
 
 #include "precomp.hpp"
-
-#include <iostream>
-#include <sys/mman.h>
-#include <errno.h>
-#include <memory>
-#include <queue>
-#include <map>
-#include <unistd.h>
-#include <opencv2/core.hpp>
-#include <opencv2/videoio.hpp>
-#include <libcamera/libcamera.h>
-#include <libcamera/framebuffer.h>
-#include <libcamera/base/span.h>
+#include "cap_libcamera.hpp"
 
 using namespace cv;
 using namespace libcamera;
 
 namespace cv {
 
-class CvCapture_libcamera_proxy CV_FINAL : public cv::IVideoCapture
-{
-public:
-   CvCapture_libcamera_proxy(int index = 0)
-    {
-        ind = 0;
-        cm_ = std::make_unique<CameraManager>();
-        cm_->start();
-        cameraId_ = cm_->cameras()[ind]->id();
-        cam_init();
-    }
-
-    bool open(int index);
-
-    bool isOpened() const CV_OVERRIDE
-    {
-       return opened_;
-    }
-
-    bool grabFrame() CV_OVERRIDE;
-
-    bool retrieveFrame(int, OutputArray) CV_OVERRIDE;
-
-    virtual int getCaptureDomain() CV_OVERRIDE { return CAP_LIBCAMERA; }
-    int mapFrameBuffer(const FrameBuffer *buffer);
-    int convertToRgb(libcamera::Request *req, OutputArray &outImage);
-
-    ~CvCapture_libcamera_proxy()
-    {
-        if (opened_)
-        {
-            camera_->stop();
-            allocator_.reset();
-            camera_->release();
-            cm_->stop();
-        }
-    }
-
-
-    private:
-    static void requestComplete(Request *request);
-    int ind;
-    StreamConfiguration streamConfig_;
-    std::unique_ptr<CameraConfiguration> config_;
-    std::unique_ptr<CameraManager> cm_;
-    std::shared_ptr<Camera> camera_;
-    static std::queue<Request*> completedRequests_;
-    std::string cameraId_;
-    std::vector<libcamera::Span<uint8_t>> planes_;
-    std::vector<libcamera::Span<uint8_t>> maps_;
-    std::vector<std::unique_ptr<Request>> requests_;
-    std::unique_ptr<FrameBufferAllocator> allocator_;
-    bool opened_=false;
-    unsigned int allocated_;
-    int reqlen_=0;
-
-    protected:
-    void cam_init();
-    void cam_init(int index);
-};
-
-std::queue<Request*> CvCapture_libcamera_proxy::completedRequests_;
+std::queue<libcamera::Request*> CvCapture_libcamera_proxy::completedRequests_;
 
 void CvCapture_libcamera_proxy::cam_init()
 {
-    
-    if(!cameraId_.empty()) 
+    if (!cameraId_.empty()) 
     {
-       open(ind);
+       open(0);
     }
 }
 
 void CvCapture_libcamera_proxy::cam_init(int index)
 {
-    if(!cameraId_.empty()) 
+    if (!cameraId_.empty()) 
     {
        open(index);
     }
@@ -131,7 +57,7 @@ void CvCapture_libcamera_proxy::cam_init(int index)
 
 void CvCapture_libcamera_proxy::requestComplete(Request *request)
 {
-    if(request->status() == Request::RequestCancelled)
+    if (request->status() == Request::RequestCancelled)
     {
 		return;
     }
@@ -141,7 +67,8 @@ void CvCapture_libcamera_proxy::requestComplete(Request *request)
     }
 }
 
-struct MappedBufferInfo {
+struct MappedBufferInfo 
+{
         uint8_t *address = nullptr;
         size_t mapLength = 0;
         size_t dmabufLength = 0;
@@ -221,13 +148,17 @@ int CvCapture_libcamera_proxy::convertToRgb(Request *request, OutputArray &outIm
     FrameBuffer *fb = nullptr;
 
     const Request::BufferMap &buffers = request->buffers();
-    for (const auto &[stream, buffer] : buffers) {
+    for (const auto &[stream, buffer] : buffers) 
+    {
         if (stream->configuration().pixelFormat == formats::YUYV)
+        {
             fb = buffer;
+        }
     }
 
     ret = mapFrameBuffer(fb);
-    if (ret < 0) {
+    if (ret < 0) 
+    {
         std::cerr <<  "Failed to mmap buffer: " << std::endl;
         return ret;
     }
@@ -243,20 +174,22 @@ bool CvCapture_libcamera_proxy::open(int index)
 {
     std::unique_ptr<Request> request;
     unsigned int nbuffers = UINT_MAX;
-    int ret=0; 
+    int ret = 0; 
     try
     {
         cameraId_ = cm_->cameras()[index]->id();
-        camera_=cm_->get(cameraId_);
-        if(!camera_) 
+        camera_ = cm_->get(cameraId_);
+        if (!camera_) 
         { 
             std::cerr << "Camera " << cameraId_ << " not found" << std::endl;
         }
         camera_->acquire();
         config_ = camera_->generateConfiguration( { StreamRole::VideoRecording } );
-        config_->at(0).pixelFormat = libcamera::formats::YUYV;
+        config_->at(index).pixelFormat = libcamera::formats::YUYV;
+        streamConfig_ = config_->at(index);
         config_->validate();
-        streamConfig_ = config_->at(0);
+        std::cout << "Validated viewfinder configuration is: "
+		  << streamConfig_.toString() << std::endl;
 	    camera_->configure(config_.get());
         allocator_ = std::make_unique<FrameBufferAllocator>(camera_);
 	    for (StreamConfiguration &cfg : *config_) 
@@ -268,7 +201,7 @@ bool CvCapture_libcamera_proxy::open(int index)
 			    return false;
 		    }
 		    allocated_ = allocator_->buffers(cfg.stream()).size();
-            nbuffers=std::min(nbuffers, allocated_);
+            nbuffers = std::min(nbuffers, allocated_);
 		    std::cout << "Allocated " << allocated_ << " buffers for stream" << std::endl;
         }
         for (unsigned int i = 0; i < nbuffers; i++) 
@@ -294,8 +227,8 @@ bool CvCapture_libcamera_proxy::open(int index)
                 }
             }
             requests_.push_back(std::move(request));
-            reqlen_ = requests_.size();
         }
+
         completedRequests_ = {};
         camera_->requestCompleted.connect(requestComplete);
         camera_->start();
@@ -310,15 +243,14 @@ bool CvCapture_libcamera_proxy::open(int index)
     {
         std::cerr << e.what() << '\n';
         std::cout<<"CvCapture_libcamera_proxy::open failed";
-        opened_=false;
+        opened_ = false;
     }
     return opened_;
 }
 
 bool CvCapture_libcamera_proxy::grabFrame()
 {
-    std::cout<<opened_<<std::endl;
-    if(opened_==false)
+    if (!opened_)
     {
         open(0);
     }
@@ -329,16 +261,14 @@ bool CvCapture_libcamera_proxy::retrieveFrame(int, OutputArray outputFrame)
 {
     if (completedRequests_.empty())
     {
-        std::cout<<"completedRequests is empty"<<std::endl;
         return false;
     }
-
     auto nextProcessedRequest = completedRequests_.front();
-
     int ret  = convertToRgb(nextProcessedRequest, outputFrame);
-    if (ret < 0) {
-            std::cout << "converttoRGB failed" << std::endl;
-            return false;
+    if (ret < 0) 
+    {
+        std::cout << "converttoRGB failed" << std::endl;
+        return false;
     }
     std::cout<<"Retrieved Frame "<<completedRequests_.front()->sequence()<<std::endl;
     completedRequests_.pop();
@@ -347,18 +277,49 @@ bool CvCapture_libcamera_proxy::retrieveFrame(int, OutputArray outputFrame)
     camera_->queueRequest(nextProcessedRequest);
 
     return true;
+}
 
+double CvCapture_libcamera_proxy::getProperty(int property_id) const
+{
+    switch (property_id)
+    {
+        // case CV_CAP_PROP_POS_MSEC: ;
+        case CV_CAP_PROP_POS_FRAMES: return completedRequests_.front()->sequence();
+        // case CV_CAP_PROP_POS_AVI_RATIO: return ;
+        case CV_CAP_PROP_FRAME_WIDTH: return streamConfig_.size.width;
+        case CV_CAP_PROP_FRAME_HEIGHT: return streamConfig_.size.height;
+        // case CV_CAP_PROP_FPS: return ;
+        // case CV_CAP_PROP_FOURCC: return ;
+    }
+    return 0;
+}
+
+bool CvCapture_libcamera_proxy::setProperty(int property_id, double value)
+{
+    handled = false;
+    switch (property_id)
+    {
+        case CV_CAP_PROP_FRAME_WIDTH:
+        streamConfig_.size.width = cvRound(value);
+        handled = true;
+        break;
+
+        case CV_CAP_PROP_FRAME_HEIGHT:
+        streamConfig_.size.height = cvRound(value);
+        handled = true;
+        break;
+    }
+
+    return handled ? true : false; 
 }
 
 cv::Ptr<cv::IVideoCapture> create_libcamera_capture_cam(int index)
 {
-    cv::Ptr<CvCapture_libcamera_proxy> capture = cv::makePtr<CvCapture_libcamera_proxy>();
-    std::cout << "index passed to create_libcamera_capture_cam : " << index << std::endl;
+    cv::Ptr<CvCapture_libcamera_proxy> capture = cv::makePtr<CvCapture_libcamera_proxy>(index);
     if (capture)
     {
         return capture;
     }
-
     return cv::Ptr<cv::IVideoCapture>();
 }
 }//namespace cv 

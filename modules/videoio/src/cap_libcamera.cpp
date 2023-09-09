@@ -135,24 +135,29 @@ int CvCapture_libcamera_proxy::mapFrameBuffer(const FrameBuffer *buffer)
 int CvCapture_libcamera_proxy::convertToRgb(Request *request, OutputArray &outImage)
 {
     int ret;
-    cv::Mat destination(streamConfig_.size.height, streamConfig_.size.width, CV_8UC2);
+    cv::Mat destination(streamConfig_.size.height, streamConfig_.size.width, CV_8UC3);
     FrameBuffer *fb = nullptr;
     const Request::BufferMap &buffers = request->buffers();
     for (const auto &[stream, buffer] : buffers) 
     {
-        if (stream->configuration().pixelFormat == formats::YUYV)
+        if (stream->configuration().pixelFormat == formats::MJPEG)
         {
             fb = buffer;
         }
     }
     ret = mapFrameBuffer(fb);
+    const FrameMetadata &metadata = fb->metadata();
     if (ret < 0) 
     {
         std::cerr <<  "Failed to mmap buffer: " << std::endl;
         return ret;
     }
-    cv::cvtColor(cv::Mat(streamConfig_.size.height, streamConfig_.size.width, CV_8UC2, planes_[0].data()),
-                 destination, COLOR_YUV2BGR_YUYV);
+
+    // Uncomment for YUYV 
+    // cv::cvtColor(cv::Mat(streamConfig_.size.height, streamConfig_.size.width, CV_8UC2, planes_[0].data()),
+    //              destination, COLOR_YUV2BGR_YUYV);
+
+    cv::imdecode(cv::Mat(1, metadata.planes()[0].bytesused, CV_8U, planes_[0].data()), IMREAD_COLOR, &destination);
     destination.copyTo(outImage);
     return 0;
 }
@@ -172,7 +177,7 @@ bool CvCapture_libcamera_proxy::open(int index)
         }
         camera_->acquire();
         config_ = camera_->generateConfiguration( { StreamRole::VideoRecording } );
-        config_->at(index).pixelFormat = libcamera::formats::YUYV;
+        config_->at(index).pixelFormat = libcamera::formats::MJPEG;
         streamConfig_ = config_->at(index);
         config_->validate();
 	    camera_->configure(config_.get());

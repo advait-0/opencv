@@ -39,20 +39,17 @@ namespace cv {
 
 std::queue<libcamera::Request*> CvCapture_libcamera_proxy::completedRequests_;
 
-void CvCapture_libcamera_proxy::cam_init()
-{
-    if (!cameraId_.empty()) 
-    {
-       open(0);
-    }
-}
-
 void CvCapture_libcamera_proxy::cam_init(int index)
 {
-    if (!cameraId_.empty()) 
-    {
-       open(index);
-    }
+    std::cout<<"Cam init called"<<std::endl;
+    cameraId_ = cm_->cameras()[index]->id();
+        camera_ = cm_->get(cameraId_);
+        if (!camera_) 
+        { 
+            std::cerr << "Camera " << cameraId_ << " not found" << std::endl;
+        }
+        opened_ = true;
+        camera_->acquire();
 }
 
 void CvCapture_libcamera_proxy::requestComplete(Request *request)
@@ -107,7 +104,6 @@ int CvCapture_libcamera_proxy::mapFrameBuffer(const FrameBuffer *buffer)
         mapLength = std::max(mapLength,
                              static_cast<size_t>(plane.offset + plane.length));
     }
-
     for (const FrameBuffer::Plane &plane : buffer->planes()) 
     {
         const int fd = plane.fd.get();
@@ -132,6 +128,37 @@ int CvCapture_libcamera_proxy::mapFrameBuffer(const FrameBuffer *buffer)
     return 0;
 }
 
+bool CvCapture_libcamera_proxy::icvSetFrameSize(int _width = 1280, int _height = 720)
+{
+    std::cout<<"Entered icvSetFrameSize"<<std::endl;
+    if (_width > 0)
+    {
+        width_set = _width;
+        std::cout<<"icv Width set value: "<<width_set<<std::endl;
+    }
+    if (_height > 0)
+    {
+        height_set = _height;
+        std::cout<<"icv Width set value: "<<width_set<<std::endl;
+        std::cout<<"icv Height set value: "<<height_set<<std::endl;
+    }
+    /* two subsequent calls setting WIDTH and HEIGHT will change
+       the video size */
+    if (width_set <= 0 || height_set <= 0)
+    {
+        return true;
+    }
+    else
+    {
+    width_ = width_set;
+    height_ = height_set;
+    std::cout<<"icvSetFrame Height:"<<height_<<"\tWidth:"<<width_<<std::endl;
+    streamConfig_.size.width = width_;
+    streamConfig_.size.height = height_;
+    return false;
+    }
+}
+
 int CvCapture_libcamera_proxy::convertToRgb(Request *request, OutputArray &outImage)
 {
     int ret;
@@ -140,7 +167,7 @@ int CvCapture_libcamera_proxy::convertToRgb(Request *request, OutputArray &outIm
     const Request::BufferMap &buffers = request->buffers();
     for (const auto &[stream, buffer] : buffers) 
     {
-        if (stream->configuration().pixelFormat == formats::MJPEG)
+        if (stream->configuration().pixelFormat == pixelFormat_)
         {
             fb = buffer;
         }
@@ -153,34 +180,35 @@ int CvCapture_libcamera_proxy::convertToRgb(Request *request, OutputArray &outIm
         return ret;
     }
 
-    // Uncomment for YUYV 
-    // cv::cvtColor(cv::Mat(streamConfig_.size.height, streamConfig_.size.width, CV_8UC2, planes_[0].data()),
-    //              destination, COLOR_YUV2BGR_YUYV);
+    switch (pixFmt_)
+    {
+        case 0:
+        cv::imdecode(cv::Mat(1, metadata.planes()[0].bytesused, CV_8U, planes_[0].data()), IMREAD_COLOR, &destination);
+        destination.copyTo(outImage);
+        break;
 
-    cv::imdecode(cv::Mat(1, metadata.planes()[0].bytesused, CV_8U, planes_[0].data()), IMREAD_COLOR, &destination);
-    destination.copyTo(outImage);
+        case 1:
+        cv::cvtColor(cv::Mat(streamConfig_.size.height, streamConfig_.size.width, CV_8UC2, planes_[0].data()), destination, COLOR_YUV2BGR_YUYV);
+        destination.copyTo(outImage);
+        break;
+
+        default:
+        cv::imdecode(cv::Mat(1, metadata.planes()[0].bytesused, CV_8U, planes_[0].data()), IMREAD_COLOR, &destination);
+        destination.copyTo(outImage);
+    }
+
     return 0;
 }
 
-bool CvCapture_libcamera_proxy::open(int index)
+bool CvCapture_libcamera_proxy::open()
 {
+    std::cout<<"Entered open"<<std::endl;
+    pixelFormat_ = libcamera::formats::MJPEG;
     std::unique_ptr<Request> request;
     unsigned int nbuffers = UINT_MAX;
     int ret = 0; 
     try
     {
-        cameraId_ = cm_->cameras()[index]->id();
-        camera_ = cm_->get(cameraId_);
-        if (!camera_) 
-        { 
-            std::cerr << "Camera " << cameraId_ << " not found" << std::endl;
-        }
-        camera_->acquire();
-        config_ = camera_->generateConfiguration( { StreamRole::VideoRecording } );
-        config_->at(index).pixelFormat = libcamera::formats::MJPEG;
-        streamConfig_ = config_->at(index);
-        config_->validate();
-	    camera_->configure(config_.get());
         allocator_ = std::make_unique<FrameBufferAllocator>(camera_);
 	    for (StreamConfiguration &cfg : *config_) 
         {
@@ -221,7 +249,6 @@ bool CvCapture_libcamera_proxy::open(int index)
         camera_->start();
         for (std::unique_ptr<Request> &req : requests_)
 		camera_->queueRequest(req.get());
-        opened_ = true;
     }//try
     
     catch(const std::exception& e)
@@ -233,11 +260,29 @@ bool CvCapture_libcamera_proxy::open(int index)
     return opened_;
 }
 
+int gc = 0;
 bool CvCapture_libcamera_proxy::grabFrame()
 {
-    if (!opened_)
+    if (!opened_ && gc>0)
     {
-        open(0);
+        open();
+    }
+    else if(opened_ && gc==0)
+    {
+        config_ = camera_->generateConfiguration({strcfg_});
+        streamConfig_ = config_->at(0);
+        std::cout<<"Validating config in grabFrame"<<std::endl;
+        std::cout<<strcfg_<<std::endl;
+        config_->at(0).size.width = width_;
+        config_->at(0).size.height = height_;
+        std::cout<<"Config details:"<<config_->at(0).size.width<<std::endl;
+        std::cout<<"Config details:"<<streamConfig_.size.width<<std::endl;
+        config_->validate();    
+        std::cout << "Validated viewfinder configuration is: "
+		  << streamConfig_.toString() << std::endl;
+	    camera_->configure(config_.get());
+        gc++;
+        open();
     }
     return true;
 }
@@ -274,18 +319,20 @@ double CvCapture_libcamera_proxy::getProperty(int property_id) const
 
 bool CvCapture_libcamera_proxy::setProperty(int property_id, double value)
 {
+    std::cout<<"Entered setProperty"<<std::endl;
     handled = false;
     switch (property_id)
     {
         case CV_CAP_PROP_FRAME_WIDTH:
-        streamConfig_.size.width = cvRound(value);
-        handled = true;
-        break;
-
+            return icvSetFrameSize(cvRound(value), 0);
         case CV_CAP_PROP_FRAME_HEIGHT:
-        streamConfig_.size.height = cvRound(value);
-        handled = true;
-        break;
+            return icvSetFrameSize(0, cvRound(value));
+        case CV_CAP_PROP_MODE:
+            pixFmt_ = cvRound(value);
+            return getLibcameraPixelFormat(value);
+        case CV_CAP_PROP_FORMAT:
+            propFmt_ = cvRound(value);
+            return getCameraConfiguration(value);
     }
     return handled ? true : false; 
 }

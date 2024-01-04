@@ -188,7 +188,7 @@ int CvCapture_libcamera_proxy::convertToRgb(Request *request, OutputArray &outIm
         break;
 
         case 1:
-        cv::cvtColor(cv::Mat(streamConfig_.size.height, streamConfig_.size.width, CV_8UC2, planes_[0].data()), destination, COLOR_YUV2BGR_YUYV);
+        cv::cvtColor(cv::Mat(config_->at(0).size.height, config_->at(0).size.width, CV_8UC2, planes_[0].data()), destination, COLOR_YUV2BGR_YUYV);
         destination.copyTo(outImage);
         break;
 
@@ -203,7 +203,6 @@ int CvCapture_libcamera_proxy::convertToRgb(Request *request, OutputArray &outIm
 bool CvCapture_libcamera_proxy::open()
 {
     std::cout<<"Entered open"<<std::endl;
-    pixelFormat_ = libcamera::formats::MJPEG;
     std::unique_ptr<Request> request;
     unsigned int nbuffers = UINT_MAX;
     int ret = 0; 
@@ -270,13 +269,14 @@ bool CvCapture_libcamera_proxy::grabFrame()
     else if(opened_ && gc==0)
     {
         config_ = camera_->generateConfiguration({strcfg_});
-        streamConfig_ = config_->at(0);
         std::cout<<"Validating config in grabFrame"<<std::endl;
         std::cout<<strcfg_<<std::endl;
+        config_->at(0).pixelFormat = pixelFormat_;
         config_->at(0).size.width = width_;
         config_->at(0).size.height = height_;
         std::cout<<"Config details:"<<config_->at(0).size.width<<std::endl;
         std::cout<<"Config details:"<<streamConfig_.size.width<<std::endl;
+        streamConfig_ = config_->at(0);
         config_->validate();    
         std::cout << "Validated viewfinder configuration is: "
 		  << streamConfig_.toString() << std::endl;
@@ -303,7 +303,11 @@ bool CvCapture_libcamera_proxy::retrieveFrame(int, OutputArray outputFrame)
     completedRequests_.pop();
     nextProcessedRequest->reuse(Request::ReuseBuffers);
     camera_->queueRequest(nextProcessedRequest);
-    return true;
+    if (!outputFrame.empty()) 
+    {
+        return true;
+    }
+    return false;
 }
 
 double CvCapture_libcamera_proxy::getProperty(int property_id) const

@@ -13,6 +13,7 @@
         "CV_CAP_CMU1394",
         "CV_CAP_STEREO",
         "CV_CAP_TYZX",
+        "CV_CAP_LIBCAMERA",
         "CV_CAP_DSHOW",
         "CV_CAP_PVAPI",
         "CV_CAP_ARAVIS",

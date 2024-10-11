@@ -1,9 +1,9 @@
 /*
  *  cap_libcamera.cpp
  *  For Video I/O
- *  by Advait Dhamorikar on 27/08/23
- *  advaitdhamorikar[at]gmail[dot]com
- *  Copyright 2023. All rights reserved.
+ *  by Advait Dhamorikar advaitdhamorikar[at]gmail[dot]com 
+ *  and Umang Jain email[at]uajain[dot]com
+ *  Copyright 2024. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -56,10 +56,12 @@ void CvCapture_libcamera_proxy::requestComplete(Request *request)
 {
     if (request->status() == Request::RequestCancelled)
     {
+        std::cout<<"Request Cancelled\n";
 		return;
     }
     else
     {
+        std::cout<<"Emplacing request\n";
         completedRequests_.emplace(request);
     }
 }
@@ -220,6 +222,8 @@ bool CvCapture_libcamera_proxy::open()
 		    allocated_ = allocator_->buffers(cfg.stream()).size();
             nbuffers = std::min(nbuffers, allocated_);
         }
+        std::cout << "nbuffers: " << nbuffers << "\n";
+
         for (unsigned int i = 0; i < nbuffers; i++) 
         {
 		    request = camera_->createRequest();
@@ -242,12 +246,15 @@ bool CvCapture_libcamera_proxy::open()
                 }
             }
             requests_.push_back(std::move(request));
+            
+            // completedRequests_.emplace(requests_);
         }
-        completedRequests_ = {};
-        camera_->requestCompleted.connect(requestComplete);
         camera_->start();
         for (std::unique_ptr<Request> &req : requests_)
-		camera_->queueRequest(req.get());
+		    camera_->queueRequest(req.get());
+        // completedRequests_ = {};
+        
+        
     }//try
     
     catch(const std::exception& e)
@@ -262,9 +269,11 @@ bool CvCapture_libcamera_proxy::open()
 int gc = 0;
 bool CvCapture_libcamera_proxy::grabFrame()
 {
+    std::cout<<"Entered grabFrame\n";
     if (!opened_ && gc>0)
     {
         open();
+        camera_->requestCompleted.connect(requestComplete);
     }
     else if(opened_ && gc==0)
     {
@@ -283,40 +292,69 @@ bool CvCapture_libcamera_proxy::grabFrame()
 	    camera_->configure(config_.get());
         gc++;
         open();
+        camera_->requestCompleted.connect(requestComplete);
     }
     return true;
 }
 
-bool CvCapture_libcamera_proxy::retrieveFrame(int, OutputArray outputFrame)
+bool CvCapture_libcamera_proxy::retrieveFrame(int, OutputArray &outputFrame)
 {
+    
+    camera_->requestCompleted.connect(requestComplete);
+    // for (std::unique_ptr<Request> &req : requests_)
+	// 	camera_->queueRequest(req.get());
     if (completedRequests_.empty())
     {
+        std::cout << "Retrieved frame is empty\n";
+        cv::Mat destination(streamConfig_.size.height, streamConfig_.size.width, CV_8UC3);
+        destination.setTo(cv::Scalar(0, 0, 0));
+        destination.copyTo(outputFrame);
         return false;
     }
+    // std::queue<libcamera::Request*> copy = completedRequests_;
+
+    // std::cout << "Printing completedRequests_ queue contents:\n";
+    // while (!copy.empty())
+    // {
+    //     libcamera::Request* req = copy.front();  // Access the front of the queue
+
+    //     // Print the request address (or any other relevant details you want to show)
+    //     std::cout << "Request pointer: " << *req << std::endl;
+
+    //     copy.pop();  // Remove the processed element from the copy
+    // }
+
     auto nextProcessedRequest = completedRequests_.front();
-    int ret  = convertToRgb(nextProcessedRequest, outputFrame);
+    int ret = convertToRgb(nextProcessedRequest, outputFrame);
+
     if (ret < 0) 
     {
-        std::cerr << "converttoRGB failed" << std::endl;
+        std::cerr << "convertToRGB failed" << std::endl;
         return false;
     }
+
     completedRequests_.pop();
     nextProcessedRequest->reuse(Request::ReuseBuffers);
     camera_->queueRequest(nextProcessedRequest);
+
     if (!outputFrame.empty()) 
     {
+        std::cout << "Returning true in retrieve frame\n";
         return true;
     }
+
     return false;
 }
+
+
 
 double CvCapture_libcamera_proxy::getProperty(int property_id) const
 {
     switch (property_id)
     {
-        case CV_CAP_PROP_POS_FRAMES: return completedRequests_.front()->sequence();
-        case CV_CAP_PROP_FRAME_WIDTH: return streamConfig_.size.width;
-        case CV_CAP_PROP_FRAME_HEIGHT: return streamConfig_.size.height;
+        case CAP_PROP_POS_FRAMES: return completedRequests_.front()->sequence();
+        case CAP_PROP_FRAME_WIDTH: return streamConfig_.size.width;
+        case CAP_PROP_FRAME_HEIGHT: return streamConfig_.size.height;
     }
     return 0;
 }
@@ -327,14 +365,14 @@ bool CvCapture_libcamera_proxy::setProperty(int property_id, double value)
     handled = false;
     switch (property_id)
     {
-        case CV_CAP_PROP_FRAME_WIDTH:
+        case CAP_PROP_FRAME_WIDTH:
             return icvSetFrameSize(cvRound(value), 0);
-        case CV_CAP_PROP_FRAME_HEIGHT:
+        case CAP_PROP_FRAME_HEIGHT:
             return icvSetFrameSize(0, cvRound(value));
-        case CV_CAP_PROP_MODE:
+        case CAP_PROP_MODE:
             pixFmt_ = cvRound(value);
             return getLibcameraPixelFormat(value);
-        case CV_CAP_PROP_FORMAT:
+        case CAP_PROP_FORMAT:
             propFmt_ = cvRound(value);
             return getCameraConfiguration(value);
     }

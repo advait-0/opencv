@@ -27,13 +27,6 @@ class CvCapture_libcamera_proxy CV_FINAL : public cv::IVideoCapture
 int width_set = 0;
 int height_set = 0;
 public:
-    CvCapture_libcamera_proxy(int index = 0) 
-    {
-        cm_ = std::make_unique<CameraManager>();
-        cm_->start();
-        cameraId_ = cm_->cameras()[index]->id();
-        cam_init(index);
-    }
     bool isOpened() const CV_OVERRIDE { return opened_; }
     bool icvSetFrameSize(int, int);
     bool open();
@@ -44,7 +37,14 @@ public:
     int mapFrameBuffer(const FrameBuffer *buffer);
     int convertToRgb(libcamera::Request *req, OutputArray &outImage);
     virtual int getCaptureDomain() CV_OVERRIDE { return cv::CAP_LIBCAMERA; }
-   
+
+    CvCapture_libcamera_proxy(int index = 0) 
+    {
+        cm_ = std::make_unique<CameraManager>();
+        cm_->start();
+        cameraId_ = cm_->cameras()[index]->id();
+        cam_init(index);
+    }
 
     ~CvCapture_libcamera_proxy()
     {
@@ -113,6 +113,7 @@ public:
     int propFmt_;
     unsigned int allocated_;
     bool opened_ = false;
+    bool open_ = false;
     
     protected:
     void cam_init();

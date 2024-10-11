@@ -398,15 +398,18 @@ bool VideoCapture::grab()
 
 bool VideoCapture::retrieve(OutputArray image, int channel)
 {
+
     CV_INSTRUMENT_REGION();
 
     bool ret = false;
     if (!icap.empty())
     {
+        // std::cout<<"Trying to retriev\n";
         ret = icap->retrieveFrame(channel, image);
     }
     if (!ret && throwOnFail)
     {
+        // std::cout<<"Retrieve failed\n";
         CV_Error_(Error::StsError, ("could not retrieve channel %d", channel));
     }
     return ret;
@@ -418,11 +421,15 @@ bool VideoCapture::read(OutputArray image)
 
     if (grab())
     {
+        // std::cout<<"grab() in cap.cpp\n";
         retrieve(image);
     } else {
+        // std::cout<<"cap.cpp releasing image";
         image.release();
     }
+    // return false;
     return !image.empty();
+    //    return true; 
 }
 
 VideoCapture& VideoCapture::operator >> (Mat& image)

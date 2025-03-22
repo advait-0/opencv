@@ -404,6 +404,24 @@ enum { CAP_PVAPI_PIXELFORMAT_MONO8    = 1,    //!< Mono8
 
 //! @} PvAPI
 
+/** @name libcamera
+    @{
+*/
+
+//! libcamera: PixelFormat
+enum { FMT_MJPEG = 0,
+       FMT_YUYV  = 1
+     };
+
+//! libcamera: StreamRole
+enum { ROLE_VIDEO = 0,
+       ROLE_STILL = 1,
+       ROLE_RAW = 2,
+       ROLE_VIEWFINDER = 3
+     };
+
+//! @} libcamera
+
 /** @name XIMEA Camera API
     @{
 */

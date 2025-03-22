@@ -17,6 +17,7 @@
 #include <libcamera/libcamera.h>
 #include <libcamera/framebuffer.h>
 #include <libcamera/base/span.h>
+#include <condition_variable>  
 
 using namespace cv;
 using namespace libcamera;
@@ -27,6 +28,7 @@ class CvCapture_libcamera_proxy CV_FINAL : public cv::IVideoCapture
 int width_set = 0;
 int height_set = 0;
 public:
+    void processBuffer(const libcamera::FrameBuffer *buffer);
     bool isOpened() const CV_OVERRIDE { return opened_; }
     bool icvSetFrameSize(int, int);
     bool open();
@@ -94,7 +96,7 @@ public:
             return true;// Default value
         }
     }
-    static void requestComplete(Request *request);
+    void requestComplete(Request *request);
     static std::queue<Request*> completedRequests_;
     bool handled;
     StreamConfiguration streamConfig_;
@@ -108,12 +110,17 @@ public:
     std::vector<libcamera::Span<uint8_t>> maps_;
     std::vector<std::unique_ptr<Request>> requests_;
     std::unique_ptr<FrameBufferAllocator> allocator_;
+    libcamera::Request *currentRequest_ = nullptr;
+    std::condition_variable requestAvailable_;
+    std::mutex mutex_;
     int width_, height_;
     int pixFmt_;
     int propFmt_;
     unsigned int allocated_;
     bool opened_ = false;
     bool open_ = false;
+    cv::Mat latestImage_;
+
     
     protected:
     void cam_init();

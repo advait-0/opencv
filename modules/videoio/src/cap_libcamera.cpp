@@ -52,18 +52,20 @@ void CvCapture_libcamera_proxy::cam_init(int index)
         camera_->acquire();
 }
 
-void CvCapture_libcamera_proxy::requestComplete(Request *request)
+void CvCapture_libcamera_proxy::requestComplete(libcamera::Request *request)
 {
-    if (request->status() == Request::RequestCancelled)
+    if (!request || !camera_)
+        return;
+
+    if (request->status() == libcamera::Request::RequestCancelled)
+        return;
+
     {
-        std::cout<<"Request Cancelled\n";
-		return;
+        std::lock_guard<std::mutex> lock(mutex_);
+        completedRequests_.push(request);
     }
-    else
-    {
-        std::cout<<"Emplacing request\n";
-        completedRequests_.emplace(request);
-    }
+
+    requestAvailable_.notify_one();
 }
 
 struct MappedBufferInfo 
@@ -246,13 +248,16 @@ bool CvCapture_libcamera_proxy::open()
                 }
             }
             requests_.push_back(std::move(request));
-            
+            // completedRequests_.push(request);
             // completedRequests_.emplace(requests_);
         }
+        camera_->requestCompleted.connect(this, &CvCapture_libcamera_proxy::requestComplete);
         camera_->start();
         for (std::unique_ptr<Request> &req : requests_)
 		    camera_->queueRequest(req.get());
         // completedRequests_ = {};
+        std::cout << "open queuing all buffers: " << "\n";
+        return 1;
         
         
     }//try
@@ -269,83 +274,60 @@ bool CvCapture_libcamera_proxy::open()
 int gc = 0;
 bool CvCapture_libcamera_proxy::grabFrame()
 {
-    std::cout<<"Entered grabFrame\n";
-    if (!opened_ && gc>0)
+    std::cout << "Entered grabFrame\n";
+    // open();
+    if (!opened_ && gc > 0)
     {
-        open();
-        camera_->requestCompleted.connect(requestComplete);
+
+        // no-op or reconnect logic
     }
-    else if(opened_ && gc==0)
+    else if (opened_ && gc == 0)
     {
         config_ = camera_->generateConfiguration({strcfg_});
-        std::cout<<"Validating config in grabFrame"<<std::endl;
-        std::cout<<strcfg_<<std::endl;
+        std::cout << "Validating config in grabFrame\n";
+        std::cout << strcfg_ << std::endl;
+
         config_->at(0).pixelFormat = pixelFormat_;
         config_->at(0).size.width = width_;
         config_->at(0).size.height = height_;
-        std::cout<<"Config details:"<<config_->at(0).size.width<<std::endl;
-        std::cout<<"Config details:"<<streamConfig_.size.width<<std::endl;
+
+        std::cout << "Config details: " << config_->at(0).size.width << std::endl;
+        std::cout << "Config details: " << streamConfig_.size.width << std::endl;
+
         streamConfig_ = config_->at(0);
-        config_->validate();    
-        std::cout << "Validated viewfinder configuration is: "
-		  << streamConfig_.toString() << std::endl;
-	    camera_->configure(config_.get());
+        config_->validate();
+
+        std::cout << "Validated viewfinder configuration is: " << streamConfig_.toString() << std::endl;
+        camera_->configure(config_.get());
+
         gc++;
         open();
-        camera_->requestCompleted.connect(requestComplete);
     }
+
     return true;
 }
 
 bool CvCapture_libcamera_proxy::retrieveFrame(int, OutputArray &outputFrame)
 {
-    
-    camera_->requestCompleted.connect(requestComplete);
-    // for (std::unique_ptr<Request> &req : requests_)
-	// 	camera_->queueRequest(req.get());
-    if (completedRequests_.empty())
-    {
-        std::cout << "Retrieved frame is empty\n";
-        cv::Mat destination(streamConfig_.size.height, streamConfig_.size.width, CV_8UC3);
-        destination.setTo(cv::Scalar(0, 0, 0));
-        destination.copyTo(outputFrame);
-        return false;
-    }
-    // std::queue<libcamera::Request*> copy = completedRequests_;
+    std::unique_lock<std::mutex> lock(mutex_);
+    requestAvailable_.wait(lock, [this] { return !completedRequests_.empty(); });
 
-    // std::cout << "Printing completedRequests_ queue contents:\n";
-    // while (!copy.empty())
-    // {
-    //     libcamera::Request* req = copy.front();  // Access the front of the queue
-
-    //     // Print the request address (or any other relevant details you want to show)
-    //     std::cout << "Request pointer: " << *req << std::endl;
-
-    //     copy.pop();  // Remove the processed element from the copy
-    // }
-
-    auto nextProcessedRequest = completedRequests_.front();
-    int ret = convertToRgb(nextProcessedRequest, outputFrame);
-
-    if (ret < 0) 
-    {
-        std::cerr << "convertToRGB failed" << std::endl;
-        return false;
-    }
-
+    libcamera::Request *request = completedRequests_.front();
     completedRequests_.pop();
-    nextProcessedRequest->reuse(Request::ReuseBuffers);
-    camera_->queueRequest(nextProcessedRequest);
+    lock.unlock(); // unlock early
 
-    if (!outputFrame.empty()) 
+    int ret = convertToRgb(request, outputFrame);
+    if (ret < 0)
     {
-        std::cout << "Returning true in retrieve frame\n";
-        return true;
+        std::cerr << "convertToRGB failed\n";
+        return false;
     }
 
-    return false;
-}
+    request->reuse(libcamera::Request::ReuseBuffers);
+    camera_->queueRequest(request);
 
+    return !outputFrame.empty();
+}
 
 
 double CvCapture_libcamera_proxy::getProperty(int property_id) const

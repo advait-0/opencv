@@ -178,7 +178,7 @@ int CvCapture_libcamera_proxy::convertToRgb(Request *request, OutputArray &outIm
     }
     ret = mapFrameBuffer(fb);
     const FrameMetadata &metadata = fb->metadata();
-    if (ret < 0) 
+    if (ret < 0 || !fb) 
     {
         std::cerr <<  "Failed to mmap buffer: " << std::endl;
         return ret;
@@ -186,19 +186,35 @@ int CvCapture_libcamera_proxy::convertToRgb(Request *request, OutputArray &outIm
 
     switch (pixFmt_)
     {
-        case 0:
+        case FMT_MJPEG: {
         cv::imdecode(cv::Mat(1, metadata.planes()[0].bytesused, CV_8U, planes_[0].data()), IMREAD_COLOR, &destination);
         destination.copyTo(outImage);
         break;
+        }
+        case FMT_YUYV: {
+        if (!planes_[0].data()) {
+            std::cerr << "YUYV: Frame plane is null!" << std::endl;
+            return -1;
+        }
 
-        case 1:
-        cv::cvtColor(cv::Mat(config_->at(0).size.height, config_->at(0).size.width, CV_8UC2, planes_[0].data()), destination, COLOR_YUV2BGR_YUYV);
+        unsigned int expectedSize = config_->at(0).size.width * config_->at(0).size.height * 2;
+        if (metadata.planes()[0].bytesused < expectedSize) {
+            std::cerr << "YUYV: Frame too small. Expected " << expectedSize
+                      << ", got " << metadata.planes()[0].bytesused << std::endl;
+            return -1;
+        }
+
+        cv::Mat yuyv(config_->at(0).size.height, config_->at(0).size.width, CV_8UC2, planes_[0].data());
+        cv::cvtColor(yuyv, destination, cv::COLOR_YUV2BGR_YUYV);
         destination.copyTo(outImage);
         break;
+        }
 
-        default:
+        default:{
         cv::imdecode(cv::Mat(1, metadata.planes()[0].bytesused, CV_8U, planes_[0].data()), IMREAD_COLOR, &destination);
         destination.copyTo(outImage);
+        break;
+        }
     }
 
     return 0;
@@ -352,8 +368,7 @@ bool CvCapture_libcamera_proxy::setProperty(int property_id, double value)
         case CAP_PROP_FRAME_HEIGHT:
             return icvSetFrameSize(0, cvRound(value));
         case CAP_PROP_MODE:
-            pixFmt_ = cvRound(value);
-            return getLibcameraPixelFormat(value);
+            return getLibcameraPixelFormat(cvRound(value));
         case CAP_PROP_FORMAT:
             propFmt_ = cvRound(value);
             return getCameraConfiguration(value);

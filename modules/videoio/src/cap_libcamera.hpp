@@ -23,6 +23,7 @@ using namespace cv;
 using namespace libcamera;
 
 namespace cv{
+
 class CvCapture_libcamera_proxy CV_FINAL : public cv::IVideoCapture
 {
 int width_set = 0;
@@ -62,18 +63,18 @@ public:
     private:
     bool getLibcameraPixelFormat(int value) 
     {
-    switch (value) 
-       {
-        case 0:
-            pixelFormat_ = libcamera::formats::MJPEG;
-            return true;
-        case 1:
-            pixelFormat_ = libcamera::formats::YUYV;
-            return true;
-        default:
-            pixelFormat_ = libcamera::formats::MJPEG;
-            return true; // Default value
-       }
+        switch (value) 
+        {
+            case FMT_MJPEG:
+                pixelFormat_ = libcamera::formats::MJPEG;
+                return true;
+            case FMT_YUYV:
+                pixelFormat_ = libcamera::formats::YUYV;
+                return true;
+            default:
+                pixelFormat_ = libcamera::formats::MJPEG;
+                return true; // Default
+        }
     }
     bool getCameraConfiguration(int value)
     {
@@ -100,8 +101,8 @@ public:
     static std::queue<Request*> completedRequests_;
     bool handled;
     StreamConfiguration streamConfig_;
-    StreamRole strcfg_;
-    PixelFormat pixelFormat_;
+    StreamRole strcfg_ = StreamRole::VideoRecording;
+    PixelFormat pixelFormat_ = libcamera::formats::MJPEG;
     std::unique_ptr<CameraConfiguration> config_;
     std::unique_ptr<CameraManager> cm_;
     std::shared_ptr<Camera> camera_;

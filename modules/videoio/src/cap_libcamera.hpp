@@ -22,23 +22,17 @@
 using namespace cv;
 using namespace libcamera;
 
-namespace cv{
+namespace cv {
 
 class CvCapture_libcamera_proxy CV_FINAL : public cv::IVideoCapture
 {
-int width_set = 0;
-int height_set = 0;
 public:
-    void processBuffer(const libcamera::FrameBuffer *buffer);
     bool isOpened() const CV_OVERRIDE { return opened_; }
-    bool icvSetFrameSize(int, int);
     bool open();
     bool grabFrame() CV_OVERRIDE;
     bool retrieveFrame(int, OutputArray) CV_OVERRIDE;
     virtual double getProperty(int) const CV_OVERRIDE;
     virtual bool setProperty(int, double) CV_OVERRIDE;
-    int mapFrameBuffer(const FrameBuffer *buffer);
-    int convertToRgb(libcamera::Request *req, OutputArray &outImage);
     virtual int getCaptureDomain() CV_OVERRIDE { return cv::CAP_LIBCAMERA; }
 
     CvCapture_libcamera_proxy(int index = 0) 
@@ -51,13 +45,48 @@ public:
 
     ~CvCapture_libcamera_proxy()
     {
-        if (opened_)
+        std::cout << "[~CvCapture_libcamera_proxy] Starting cleanup..." << std::endl;
+    
+        if (!opened_)
+            return;
+    
+        for (auto &req : requests_) 
+        {
+            if (req && req->status() == libcamera::Request::RequestPending) 
+            {
+                camera_->release();
+            }
+        }
+    
+        if (camera_) 
         {
             camera_->stop();
-            allocator_.reset();
-            camera_->release();
-            cm_->stop();
         }
+    
+        allocator_.reset();
+        requests_.clear();
+        planes_.clear();
+        maps_.clear();
+    
+        config_.reset();
+        streamConfig_ = {};        
+    
+        if (camera_) 
+        {
+            camera_->release();
+            camera_.reset();
+        }
+    
+        if (cm_) 
+        {
+            cm_->stop();
+            cm_.reset();
+        }
+    
+        cameraId_.clear();
+        opened_ = false;
+        open_ = false;
+        std::cout << "Closing the device" << std::endl;
     }
     
     private:
@@ -76,33 +105,37 @@ public:
                 return true; // Default
         }
     }
+
     bool getCameraConfiguration(int value)
     {
      switch (value) 
        {
-        case 0:
+        case ROLE_RAW:
             strcfg_ = StreamRole::Raw;
             return true;
-        case 1:
+        case ROLE_STILL:
             strcfg_ = StreamRole::StillCapture;
             return true;
-        case 2:
+        case ROLE_VIDEO:
             strcfg_ = StreamRole::VideoRecording;
             return true;
-        case 3:
+        case ROLE_VIEWFINDER:
             strcfg_ = StreamRole::Viewfinder;
             return true;
         default:
             strcfg_ = StreamRole::VideoRecording;
-            return true;// Default value
+            return true; // Default 
         }
     }
+
     void requestComplete(Request *request);
-    static std::queue<Request*> completedRequests_;
-    bool handled;
-    StreamConfiguration streamConfig_;
-    StreamRole strcfg_ = StreamRole::VideoRecording;
-    PixelFormat pixelFormat_ = libcamera::formats::MJPEG;
+    void cam_init();
+    void cam_init(int index);
+    int mapFrameBuffer(const FrameBuffer *buffer);
+    int convertToRgb(libcamera::Request *req, OutputArray &outImage);
+    bool icvSetFrameSize(int, int);
+
+    std::queue<Request*> completedRequests_;
     std::unique_ptr<CameraConfiguration> config_;
     std::unique_ptr<CameraManager> cm_;
     std::shared_ptr<Camera> camera_;
@@ -111,21 +144,26 @@ public:
     std::vector<libcamera::Span<uint8_t>> maps_;
     std::vector<std::unique_ptr<Request>> requests_;
     std::unique_ptr<FrameBufferAllocator> allocator_;
-    libcamera::Request *currentRequest_ = nullptr;
     std::condition_variable requestAvailable_;
     std::mutex mutex_;
-    int width_, height_;
+    
+    int width_ = 480, height_ = 640;
     int pixFmt_;
     int propFmt_;
+    int gc = 0;
     unsigned int allocated_;
     bool opened_ = false;
     bool open_ = false;
-    cv::Mat latestImage_;
 
-    
-    protected:
-    void cam_init();
-    void cam_init(int index);
+    struct MappedBufferInfo 
+    {
+        uint8_t *address = nullptr;
+        size_t mapLength = 0;
+        size_t dmabufLength = 0;
+    };
+    StreamConfiguration streamConfig_;
+    StreamRole strcfg_ = StreamRole::VideoRecording;
+    PixelFormat pixelFormat_ = libcamera::formats::MJPEG;
 };
 }
  

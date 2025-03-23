@@ -37,17 +37,10 @@ using namespace libcamera;
 
 namespace cv {
 
-void CvCapture_libcamera_proxy::cam_init(int index)
+void CvCapture_libcamera_proxy::cam_init()
 {
-    std::cout<<"Cam init called"<<std::endl;
-    cameraId_ = cm_->cameras()[index]->id();
-    camera_ = cm_->get(cameraId_);
-    if (!camera_) 
-    { 
-        std::cerr << "Camera " << cameraId_ << " not found" << std::endl;
-    }
+    std::cout << "Cam init called for camera: " << cameraId_ << std::endl;
     opened_ = true;
-    camera_->acquire();
 }
 
 void CvCapture_libcamera_proxy::requestComplete(libcamera::Request *request)

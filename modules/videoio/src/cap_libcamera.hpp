@@ -35,13 +35,32 @@ public:
     virtual bool setProperty(int, double) CV_OVERRIDE;
     virtual int getCaptureDomain() CV_OVERRIDE { return cv::CAP_LIBCAMERA; }
 
-    CvCapture_libcamera_proxy(int index = 0) 
+    CvCapture_libcamera_proxy(size_t index = 0) 
     {
         cm_ = std::make_unique<CameraManager>();
         cm_->start();
+
+        if (index >= cm_->cameras().size()) {
+            std::cerr << "Invalid camera index " << index << std::endl;
+            return;
+        }
+
         cameraId_ = cm_->cameras()[index]->id();
-        cam_init(index);
-    }
+        camera_ = cm_->get(cameraId_);
+
+        if (!camera_) {
+            std::cerr << "Camera " << cameraId_ << " not found" << std::endl;
+            return;
+        }
+
+        if (camera_->acquire()) {
+            std::cerr << "Failed to acquire camera " << cameraId_ << std::endl;
+            return;
+        }
+
+        cam_init(); // now we don't need index here
+   }
+
 
     ~CvCapture_libcamera_proxy()
     {

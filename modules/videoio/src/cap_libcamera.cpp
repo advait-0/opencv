@@ -140,69 +140,80 @@ int CvCapture_libcamera_proxy::convertToRgb(Request *request, OutputArray &outIm
             fb = buffer;
         }
     }
+
     int ret = mapFrameBuffer(fb);
     const FrameMetadata &metadata = fb->metadata();
     if (ret < 0 || !fb) 
     {
-        std::cerr <<  "Failed to mmap buffer: " << std::endl;
+        std::cerr << "Failed to mmap buffer." << std::endl;
         return ret;
     }
 
+    unsigned char* data = static_cast<unsigned char*>(planes_[0].data());
+
     switch (pixFmt_)
     {
-        case FMT_MJPEG: 
-        {
+        case FMT_MJPEG:
             std::cerr << "Entered FMT_MJPEG" << std::endl;
-            cv::imdecode(cv::Mat(1, metadata.planes()[0].bytesused, 
-                CV_8U, planes_[0].data()), IMREAD_COLOR, &destination);
-            destination.copyTo(outImage);
+            cv::imdecode(cv::Mat(1, metadata.planes()[0].bytesused, CV_8U, data), IMREAD_COLOR, &destination);
             break;
-        }
-        case FMT_YUYV: 
-        {
+
+        case FMT_YUYV:
             std::cerr << "Entered FMT_YUYV" << std::endl;
-            if (!planes_[0].data()) 
-            {
-                std::cerr << "YUYV: Frame plane is null!" << std::endl;
+            if (metadata.planes()[0].bytesused < config_->at(0).size.width * config_->at(0).size.height * 2) {
+                std::cerr << "YUYV: Frame too small." << std::endl;
                 return -1;
             }
-
-            unsigned int expectedSize = config_->at(0).size.width * config_->at(0).size.height * 2;
-            if (metadata.planes()[0].bytesused < expectedSize) 
-            {
-                std::cerr << "YUYV: Frame too small. Expected " << expectedSize
-                          << ", got " << metadata.planes()[0].bytesused << std::endl;
-                return -1;
-            }
-            unsigned char* data = static_cast<unsigned char*>(planes_[0].data());
-            if (data) 
-            {
-                std::cout << "First 20 bytes of YUYV data:" << std::endl;
-                for (int i = 0; i < 20; ++i) 
-                {
-                    printf("%02X ", data[i]); // Print in hex
-                }
-                std::cout << std::endl;
-            } 
-            else 
-            {
-                std::cerr << "YUYV: planes_[0].data() is null!" << std::endl;
-            }
-
-            cv::Mat yuyv(config_->at(0).size.height, config_->at(0).size.width, CV_8UC2, planes_[0].data());
-            cv::cvtColor(yuyv, destination, cv::COLOR_YUV2BGR_YUYV);
-            destination.copyTo(outImage);
+            cv::cvtColor(cv::Mat(config_->at(0).size.height, config_->at(0).size.width, CV_8UC2, data),
+                         destination, cv::COLOR_YUV2BGR_YUYV);
             break;
-        }
+
+        case FMT_NV12:
+            std::cerr << "Entered FMT_NV12" << std::endl;
+            cv::cvtColor(cv::Mat(config_->at(0).size.height * 3 / 2, config_->at(0).size.width, CV_8UC1, data),
+                         destination, cv::COLOR_YUV2BGR_NV12);
+            break;
+
+        case FMT_NV21:
+            std::cerr << "Entered FMT_NV21" << std::endl;
+            cv::cvtColor(cv::Mat(config_->at(0).size.height * 3 / 2, config_->at(0).size.width, CV_8UC1, data),
+                         destination, cv::COLOR_YUV2BGR_NV21);
+            break;
+
+        case FMT_RGB888:
+            std::cerr << "Entered FMT_RGB888" << std::endl;
+            destination = cv::Mat(config_->at(0).size.height, config_->at(0).size.width, CV_8UC3, data).clone();
+            break;
+
+        case FMT_BGR888:
+            std::cerr << "Entered FMT_BGR888" << std::endl;
+            destination = cv::Mat(config_->at(0).size.height, config_->at(0).size.width, CV_8UC3, data).clone();
+            break;
+
+        case FMT_UYVY:
+            std::cerr << "Entered FMT_UYVY" << std::endl;
+            cv::cvtColor(cv::Mat(config_->at(0).size.height, config_->at(0).size.width, CV_8UC2, data),
+                         destination, cv::COLOR_YUV2BGR_UYVY);
+            break;
+
+        case FMT_YUV420:
+            std::cerr << "Entered FMT_YUV420" << std::endl;
+            cv::cvtColor(cv::Mat(config_->at(0).size.height * 3 / 2, config_->at(0).size.width, CV_8UC1, data),
+                         destination, cv::COLOR_YUV2BGR_I420);
+            break;
+
         default:
-        {
-            std::cerr << "Defaulting to MJPEG" << std::endl;
-            cv::imdecode(cv::Mat(1, metadata.planes()[0].bytesused, CV_8U, planes_[0].data()), IMREAD_COLOR, &destination);
-            destination.copyTo(outImage);
+            std::cerr << "Defaulting to YUYV fallback" << std::endl;
+            if (metadata.planes()[0].bytesused < config_->at(0).size.width * config_->at(0).size.height * 2) {
+                std::cerr << "YUYV: Frame too small." << std::endl;
+                return -1;
+            }
+            cv::cvtColor(cv::Mat(config_->at(0).size.height, config_->at(0).size.width, CV_8UC2, data),
+                         destination, cv::COLOR_YUV2BGR_YUYV);
             break;
-        }
     }
 
+    destination.copyTo(outImage);
     return 0;
 }
 
@@ -270,7 +281,7 @@ bool CvCapture_libcamera_proxy::open()
 
 bool CvCapture_libcamera_proxy::grabFrame()
 {
-    std::cout << "Entered grabFrame\n";
+    // std::cout << "Entered grabFrame\n";
     if (!opened_ && gc > 0)
     {
         ;

@@ -410,7 +410,13 @@ enum { CAP_PVAPI_PIXELFORMAT_MONO8    = 1,    //!< Mono8
 
 //! libcamera: PixelFormat
 enum { FMT_MJPEG = 0,
-       FMT_YUYV  = 1
+       FMT_YUYV  = 1,
+       FMT_NV12 = 2,
+       FMT_NV21 = 3,
+       FMT_RGB888 = 4,
+       FMT_BGR888 = 5,
+       FMT_UYVY = 6,
+       FMT_YUV420 = 7
      };
 
 //! libcamera: StreamRole

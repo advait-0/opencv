@@ -1598,6 +1598,13 @@ if(WITH_V4L OR HAVE_V4L)
   status("    v4l/v4l2:" HAVE_V4L THEN "YES (${v4l_status})" ELSE NO)
 endif()
 
+if(WITH_LIBCAMERA OR HAVE_LIBCAMERA)
+  ocv_build_features_string(libcamera_status
+    IF HAVE_LIBCAMERA THEN "${LIBCAMERA_VERSION}"
+    ELSE "NO")
+  status("    libcamera:" HAVE_LIBCAMERA THEN "YES (${libcamera_status})" ELSE NO)
+endif()
+
 if(WITH_DSHOW OR HAVE_DSHOW)
   status("    DirectShow:" HAVE_DSHOW THEN YES ELSE NO)
 endif()

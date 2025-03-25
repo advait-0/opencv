@@ -31,90 +31,89 @@
 
 #include "precomp.hpp"
 #include "cap_libcamera.hpp"
-
+ 
 using namespace cv;
 using namespace libcamera;
-
+ 
 namespace cv {
-
+ 
 void CvCapture_libcamera_proxy::cam_init()
 {
-    std::cout << "Cam init called for camera: " << cameraId_ << std::endl;
-    opened_ = true;
+   std::cout << "Initializing camera: " << cameraId_ << std::endl;
+   opened_ = true;
 }
-
+ 
 void CvCapture_libcamera_proxy::requestComplete(libcamera::Request *request)
 {
-    if (!request || !camera_)
-        return;
+   if (!request || !camera_)
+       return;
 
-    if (request->status() == libcamera::Request::RequestCancelled)
-        return;
+   if (request->status() == libcamera::Request::RequestCancelled)
+       return;
 
-    {
-        std::lock_guard<std::mutex> lock(mutex_);
-        completedRequests_.push(request);
-    }
-    requestAvailable_.notify_one();
+   std::lock_guard<std::mutex> lock(mutex_);
+   completedRequests_.push(request);
+   
+   requestAvailable_.notify_one();
 }
-
+ 
 int CvCapture_libcamera_proxy::mapFrameBuffer(const FrameBuffer *buffer)
 {
-    int error;
-    if (buffer->planes().empty()) 
-    {
-        std::cerr << "Buffer has no planes " << std::endl;
-        return -EINVAL;
-    }
-    maps_.clear();
-    planes_.clear();
-    planes_.reserve(buffer->planes().size());
-    std::map<int, MappedBufferInfo> mappedBuffers;
-    for (const FrameBuffer::Plane &plane : buffer->planes()) 
-    {
-        const int fd = plane.fd.get();
-        if (mappedBuffers.find(fd) == mappedBuffers.end()) 
-        {
-            const size_t length = lseek(fd, 0, SEEK_END);
-            mappedBuffers[fd] = MappedBufferInfo{ nullptr, 0, length };
-        }
-        const size_t length = mappedBuffers[fd].dmabufLength;
-        if (plane.offset > length || plane.offset + plane.length > length) 
-        {
-            std::cerr << "plane is out of buffer: "
-                      << "buffer length=" << length
-                      << ", plane offset=" << plane.offset
-                      << ", plane length=" << plane.length << std::endl;
-            return -ERANGE;
-        }
-        size_t &mapLength = mappedBuffers[fd].mapLength;
-        mapLength = std::max(mapLength,
-                             static_cast<size_t>(plane.offset + plane.length));
-    }
-    for (const FrameBuffer::Plane &plane : buffer->planes()) 
-    {
-        const int fd = plane.fd.get();
-        auto &info = mappedBuffers[fd];
+   int error;
+   if (buffer->planes().empty()) 
+   {
+       std::cerr << "Buffer has no planes " << std::endl;
+       return -EINVAL;
+   }
+   maps_.clear();
+   planes_.clear();
+   planes_.reserve(buffer->planes().size());
+   std::map<int, MappedBufferInfo> mappedBuffers;
+   for (const FrameBuffer::Plane &plane : buffer->planes()) 
+   {
+       const int fd = plane.fd.get();
+       if (mappedBuffers.find(fd) == mappedBuffers.end()) 
+       {
+           const size_t length = lseek(fd, 0, SEEK_END);
+           mappedBuffers[fd] = MappedBufferInfo{ nullptr, 0, length };
+       }
+       const size_t length = mappedBuffers[fd].dmabufLength;
+       if (plane.offset > length || plane.offset + plane.length > length) 
+       {
+           std::cerr << "plane is out of buffer: "
+                     << "buffer length=" << length
+                     << ", plane offset=" << plane.offset
+                     << ", plane length=" << plane.length << std::endl;
+           return -ERANGE;
+       }
+       size_t &mapLength = mappedBuffers[fd].mapLength;
+       mapLength = std::max(mapLength,
+                           static_cast<size_t>(plane.offset + plane.length));
+   }
+   for (const FrameBuffer::Plane &plane : buffer->planes()) 
+   {
+       const int fd = plane.fd.get();
+       auto &info = mappedBuffers[fd];
         if (!info.address) 
         {
-            void *address = mmap(nullptr, info.mapLength, PROT_READ | PROT_WRITE,
-                                 MAP_SHARED, fd, 0);
-            if (address == MAP_FAILED) 
-            {
-                error = -errno;
-                std::cerr <<  "Failed to mmap plane: "
-                          << strerror(-error) << std::endl;
-                return -error;
-            }
-            info.address = static_cast<uint8_t *>(address);
-            maps_.emplace_back(info.address, info.mapLength);
+           void *address = mmap(nullptr, info.mapLength, PROT_READ | PROT_WRITE,
+                                MAP_SHARED, fd, 0);
+           if (address == MAP_FAILED) 
+           {
+               error = -errno;
+               std::cerr <<  "Failed to mmap plane: "
+                         << strerror(-error) << std::endl;
+               return -error;
+           }
+           info.address = static_cast<uint8_t *>(address);
+           maps_.emplace_back(info.address, info.mapLength);
         }
 
         planes_.emplace_back(info.address + plane.offset, plane.length);
-    }
+   }
     return 0;
 }
-
+ 
 bool CvCapture_libcamera_proxy::icvSetFrameSize(int width, int height)
 {
     if (width > 0)
@@ -122,15 +121,11 @@ bool CvCapture_libcamera_proxy::icvSetFrameSize(int width, int height)
     if (height > 0)
         height_ = height;
 
-    std::cout << "icv Width set value: " << width << std::endl;
-    std::cout << "icv Height set value: " << height << std::endl;
-
     return true;
-}
-
+} 
+ 
 int CvCapture_libcamera_proxy::convertToRgb(Request *request, OutputArray &outImage)
 {
-    cv::Mat destination(streamConfig_.size.height, streamConfig_.size.width, CV_8UC3);
     FrameBuffer *fb = nullptr;
     const Request::BufferMap &buffers = request->buffers();
     for (const auto &[stream, buffer] : buffers) 
@@ -140,7 +135,7 @@ int CvCapture_libcamera_proxy::convertToRgb(Request *request, OutputArray &outIm
             fb = buffer;
         }
     }
-
+ 
     int ret = mapFrameBuffer(fb);
     const FrameMetadata &metadata = fb->metadata();
     if (ret < 0 || !fb) 
@@ -148,78 +143,107 @@ int CvCapture_libcamera_proxy::convertToRgb(Request *request, OutputArray &outIm
         std::cerr << "Failed to mmap buffer." << std::endl;
         return ret;
     }
-
+ 
     unsigned char* data = static_cast<unsigned char*>(planes_[0].data());
-
+    cv::Mat& destination = outImage.getMatRef();
     switch (pixFmt_)
     {
         case FMT_MJPEG:
-            std::cerr << "Entered FMT_MJPEG" << std::endl;
-            cv::imdecode(cv::Mat(1, metadata.planes()[0].bytesused, CV_8U, data), IMREAD_COLOR, &destination);
+        {
+            cv::imdecode(
+                cv::Mat(1, metadata.planes()[0].bytesused, CV_8U, data),
+                IMREAD_COLOR, &destination);
             break;
+        }
 
         case FMT_YUYV:
-            std::cerr << "Entered FMT_YUYV" << std::endl;
-            if (metadata.planes()[0].bytesused < config_->at(0).size.width * config_->at(0).size.height * 2) {
+        {
+            if (metadata.planes()[0].bytesused <
+                config_->at(0).size.width * config_->at(0).size.height * 2)
+            {
                 std::cerr << "YUYV: Frame too small." << std::endl;
                 return -1;
             }
-            cv::cvtColor(cv::Mat(config_->at(0).size.height, config_->at(0).size.width, CV_8UC2, data),
-                         destination, cv::COLOR_YUV2BGR_YUYV);
+
+            cv::cvtColor(
+                cv::Mat(config_->at(0).size.height,
+                        config_->at(0).size.width,
+                        CV_8UC2, data),
+                destination, cv::COLOR_YUV2BGR_YUYV);
             break;
+        }
 
         case FMT_NV12:
-            std::cerr << "Entered FMT_NV12" << std::endl;
-            cv::cvtColor(cv::Mat(config_->at(0).size.height * 3 / 2, config_->at(0).size.width, CV_8UC1, data),
-                         destination, cv::COLOR_YUV2BGR_NV12);
+        {
+            cv::cvtColor(
+                cv::Mat(config_->at(0).size.height * 3 / 2,
+                        config_->at(0).size.width,
+                        CV_8UC1, data),
+                destination, cv::COLOR_YUV2BGR_NV12);
             break;
-
-        case FMT_NV21:
-            std::cerr << "Entered FMT_NV21" << std::endl;
-            cv::cvtColor(cv::Mat(config_->at(0).size.height * 3 / 2, config_->at(0).size.width, CV_8UC1, data),
-                         destination, cv::COLOR_YUV2BGR_NV21);
-            break;
+        }
 
         case FMT_RGB888:
-            std::cerr << "Entered FMT_RGB888" << std::endl;
-            destination = cv::Mat(config_->at(0).size.height, config_->at(0).size.width, CV_8UC3, data).clone();
+        {
+            destination = cv::Mat(config_->at(0).size.height,
+                                config_->at(0).size.width,
+                                CV_8UC3, data).clone();
             break;
+        }
 
         case FMT_BGR888:
-            std::cerr << "Entered FMT_BGR888" << std::endl;
-            destination = cv::Mat(config_->at(0).size.height, config_->at(0).size.width, CV_8UC3, data).clone();
+        {
+            cv::cvtColor(
+                cv::Mat(config_->at(0).size.height,
+                        config_->at(0).size.width,
+                        CV_8UC3, data),
+                destination, cv::COLOR_BGR2RGB);
             break;
+        }
 
         case FMT_UYVY:
-            std::cerr << "Entered FMT_UYVY" << std::endl;
-            cv::cvtColor(cv::Mat(config_->at(0).size.height, config_->at(0).size.width, CV_8UC2, data),
-                         destination, cv::COLOR_YUV2BGR_UYVY);
+        {
+            cv::Mat yuyvFrame(config_->at(0).size.height,
+                            config_->at(0).size.width,
+                            CV_8UC2, data);
+            cv::cvtColor(yuyvFrame, destination, cv::COLOR_YUV2BGR_YUY2);
             break;
+        }
 
         case FMT_YUV420:
-            std::cerr << "Entered FMT_YUV420" << std::endl;
-            cv::cvtColor(cv::Mat(config_->at(0).size.height * 3 / 2, config_->at(0).size.width, CV_8UC1, data),
-                         destination, cv::COLOR_YUV2BGR_I420);
+        {
+            cv::cvtColor(
+                cv::Mat(config_->at(0).size.height * 3 / 2,
+                        config_->at(0).size.width,
+                        CV_8UC1, data),
+                destination, cv::COLOR_YUV2BGR_I420);
             break;
+        }
 
         default:
-            std::cerr << "Defaulting to YUYV fallback" << std::endl;
-            if (metadata.planes()[0].bytesused < config_->at(0).size.width * config_->at(0).size.height * 2) {
+        {
+            if (metadata.planes()[0].bytesused <
+                config_->at(0).size.width * config_->at(0).size.height * 2)
+            {
                 std::cerr << "YUYV: Frame too small." << std::endl;
                 return -1;
             }
-            cv::cvtColor(cv::Mat(config_->at(0).size.height, config_->at(0).size.width, CV_8UC2, data),
-                         destination, cv::COLOR_YUV2BGR_YUYV);
+
+            cv::cvtColor(
+                cv::Mat(config_->at(0).size.height,
+                        config_->at(0).size.width,
+                        CV_8UC2, data),
+                destination, cv::COLOR_YUV2BGR_YUYV);
             break;
+        }
     }
 
-    destination.copyTo(outImage);
     return 0;
+
 }
 
 bool CvCapture_libcamera_proxy::open()
 {
-    std::cout<<"Entered open"<<std::endl;
     std::unique_ptr<Request> request;
     unsigned int nbuffers = UINT_MAX;
     int ret = 0; 
@@ -237,8 +261,7 @@ bool CvCapture_libcamera_proxy::open()
             allocated_ = allocator_->buffers(cfg.stream()).size();
             nbuffers = std::min(nbuffers, allocated_);
         }
-        std::cout << "nbuffers: " << nbuffers << "\n";
-
+ 
         for (unsigned int i = 0; i < nbuffers; i++) 
         {
             request = camera_->createRequest();
@@ -265,9 +288,8 @@ bool CvCapture_libcamera_proxy::open()
         camera_->requestCompleted.connect(this, &CvCapture_libcamera_proxy::requestComplete);
         camera_->start();
         for (std::unique_ptr<Request> &req : requests_)
-            camera_->queueRequest(req.get());
-        std::cout << "open queuing all buffers: " << "\n";
-        
+             camera_->queueRequest(req.get());
+
         return 1;
     }
     catch(const std::exception& e)
@@ -276,12 +298,12 @@ bool CvCapture_libcamera_proxy::open()
         std::cerr<<"CvCapture_libcamera_proxy::open failed"<<std::endl;
         opened_ = false;
     }
+
     return opened_;
 }
-
+ 
 bool CvCapture_libcamera_proxy::grabFrame()
 {
-    // std::cout << "Entered grabFrame\n";
     if (!opened_ && gc > 0)
     {
         ;
@@ -290,25 +312,21 @@ bool CvCapture_libcamera_proxy::grabFrame()
     {
         // Generate configuration
         config_ = camera_->generateConfiguration({ strcfg_ });
-
         if (!config_ || config_->empty()) 
         {
             std::cerr << "Failed to generate stream configuration." << std::endl;
             return -1;
         }
-
+ 
         // Update configuration
         libcamera::StreamConfiguration &cfg = config_->at(0); 
         cfg.pixelFormat = pixelFormat_;
         cfg.size.width = width_;
         cfg.size.height = height_;
-
-        std::cout << "Requested stream role: " << propFmt_ << std::endl;
-        std::cout << "Requested config: " << cfg.toString() << std::endl;
-
+ 
         // Validate config
         CameraConfiguration::Status status = config_->validate();
-
+ 
         if (status == CameraConfiguration::Invalid) 
         {
             std::cerr << "Camera configuration is invalid!" << std::endl;
@@ -318,41 +336,40 @@ bool CvCapture_libcamera_proxy::grabFrame()
         {
             std::cout << "Camera configuration was adjusted by libcamera!" << std::endl;
         }
-
+ 
         camera_->configure(config_.get());
         streamConfig_ = cfg;
-        std::cout << "Final stream configuration: " << streamConfig_.toString() << std::endl;
-
+ 
         gc++;
         open();
     }
-
+ 
     return true;
 }
-
+ 
 bool CvCapture_libcamera_proxy::retrieveFrame(int, OutputArray &outputFrame)
 {
     std::unique_lock<std::mutex> lock(mutex_);
     requestAvailable_.wait(lock, [this] { return !completedRequests_.empty(); });
-
+ 
     libcamera::Request *request = completedRequests_.front();
     completedRequests_.pop();
     lock.unlock(); 
-
+ 
     int ret = convertToRgb(request, outputFrame);
     if (ret < 0)
     {
         std::cerr << "convertToRGB failed\n";
         return false;
     }
-
+ 
     request->reuse(libcamera::Request::ReuseBuffers);
     camera_->queueRequest(request);
 
     return !outputFrame.empty();
 }
-
-
+ 
+ 
 double CvCapture_libcamera_proxy::getProperty(int property_id) const
 {
     switch (property_id)
@@ -363,10 +380,9 @@ double CvCapture_libcamera_proxy::getProperty(int property_id) const
     }
     return 0;
 }
-
+ 
 bool CvCapture_libcamera_proxy::setProperty(int property_id, double value)
 {
-    std::cout<<"Entered setProperty"<<std::endl;
     switch (property_id)
     {
         case CAP_PROP_FRAME_WIDTH:
@@ -382,7 +398,7 @@ bool CvCapture_libcamera_proxy::setProperty(int property_id, double value)
     }
     return false; 
 }
-
+ 
 cv::Ptr<cv::IVideoCapture> create_libcamera_capture_cam(int index)
 {
     cv::Ptr<CvCapture_libcamera_proxy> capture = cv::makePtr<CvCapture_libcamera_proxy>(index);

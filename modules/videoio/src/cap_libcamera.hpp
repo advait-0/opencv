@@ -39,8 +39,9 @@ public:
     {
         cm_ = std::make_unique<CameraManager>();
         cm_->start();
-
-        if (index >= cm_->cameras().size()) {
+        std::cout << "libcamera cameras(): " << cm_->cameras().size() << std::endl;
+        if (index >= cm_->cameras().size()) 
+        {
             std::cerr << "Invalid camera index " << index << std::endl;
             return;
         }
@@ -48,26 +49,31 @@ public:
         cameraId_ = cm_->cameras()[index]->id();
         camera_ = cm_->get(cameraId_);
 
-        if (!camera_) {
+        if (!camera_) 
+        {
             std::cerr << "Camera " << cameraId_ << " not found" << std::endl;
             return;
         }
 
-        if (camera_->acquire()) {
+        if (camera_->acquire()) 
+        {
             std::cerr << "Failed to acquire camera " << cameraId_ << std::endl;
             return;
         }
 
-        cam_init(); // now we don't need index here
+        cam_init(); 
    }
 
 
     ~CvCapture_libcamera_proxy()
     {
-        std::cout << "[~CvCapture_libcamera_proxy] Starting cleanup..." << std::endl;
-    
         if (!opened_)
             return;
+
+        if (camera_) 
+        {
+            camera_->stop();
+        }
     
         for (auto &req : requests_) 
         {
@@ -77,10 +83,6 @@ public:
             }
         }
     
-        if (camera_) 
-        {
-            camera_->stop();
-        }
     
         allocator_.reset();
         requests_.clear();
@@ -109,21 +111,40 @@ public:
     }
     
     private:
-    bool getLibcameraPixelFormat(int value) 
+    bool getLibcameraPixelFormat(int value)
     {
-        switch (value) 
+        switch (value)
         {
             case FMT_MJPEG:
                 pixelFormat_ = libcamera::formats::MJPEG;
                 return true;
+
             case FMT_YUYV:
                 pixelFormat_ = libcamera::formats::YUYV;
                 return true;
+
+            case FMT_RGB888:
+                pixelFormat_ = libcamera::formats::RGB888;
+                return true;
+
+            case FMT_BGR888:
+                pixelFormat_ = libcamera::formats::BGR888;
+                return true;
+
+            case FMT_NV12:
+                pixelFormat_ = libcamera::formats::NV12;
+                return true;
+
+            case FMT_YUV420:
+                pixelFormat_ = libcamera::formats::YUV420;
+                return true;
+
             default:
-                pixelFormat_ = libcamera::formats::MJPEG;
-                return true; // Default
+                pixelFormat_ = libcamera::formats::YUYV;
+                return false; 
         }
     }
+
 
     bool getCameraConfiguration(int value)
     {

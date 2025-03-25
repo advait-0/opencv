@@ -10,6 +10,7 @@
         "CV_CAP_VFW",
         "CV_CAP_V4L",
         "CV_CAP_V4L2",
+        "CV_CAP_LIBCAMERA"
         "CV_CAP_FIREWARE",
         "CV_CAP_FIREWIRE",
         "CV_CAP_IEEE1394",
